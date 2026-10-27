@@ -6,13 +6,14 @@
 
 from __future__ import annotations
 
+from contextlib import nullcontext
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from memory_core.decay import DecayParams
@@ -22,7 +23,7 @@ from app.adapters.neo4j import Neo4jIndex
 from app.adapters.qdrant import QdrantIndex
 from app.jobs.runtime import Runtime, configure_runtime, reset_runtime
 from app.jobs.tasks import dispatch_outbox
-from app.models import AuditLog, Memory, OutboxEvent, ReviewItem
+from app.models import AuditLog, Memory, OutboxEvent, ProjectionState, ReviewItem
 from app.models.base import utcnow
 from app.repositories.memory import MemoryRepository
 from app.services.lifecycle import (
@@ -35,6 +36,18 @@ from app.services.lifecycle import (
 pytestmark = pytest.mark.integration
 
 NOW = datetime(2026, 10, 27, tzinfo=UTC)
+
+
+class BrokenEmbedding:
+    """模拟 Provider 不可用；对账不得写兜底向量。"""
+
+    provider = "fake"
+    name = "fake-8"
+    identity = "fake:fake-8"
+    dim = 8
+
+    async def embed(self, texts: list[str]) -> list[list[float]]:
+        raise RuntimeError("embedding provider unavailable")
 
 
 def _memory(
@@ -135,6 +148,27 @@ def test_purge_removes_only_soft_deleted_older_than_30_days(
     assert len(events) == 1
     assert events[0].payload["hard"] is True
     assert events[0].payload["memory_id"] == "old"
+
+
+def test_purge_boundary_is_strictly_older_than_30_days(
+    db_session: Session,
+) -> None:
+    exactly = _memory(
+        "exactly-30d",
+        status="deleted",
+        deleted_at=NOW - timedelta(days=30),
+    )
+    older = _memory(
+        "older-than-30d",
+        status="deleted",
+        deleted_at=NOW - timedelta(days=30, seconds=1),
+    )
+    db_session.add_all([exactly, older])
+    db_session.flush()
+
+    assert purge_deleted(db_session, NOW) == 1
+    assert db_session.get(Memory, "exactly-30d").status == "deleted"
+    assert db_session.get(Memory, "older-than-30d").status == "purged"
 
 
 def test_prune_ops_history_respects_retention_windows(db_session: Session) -> None:
@@ -266,6 +300,73 @@ def test_hard_delete_cascades_to_indexes_and_attached_files(
     assert all(not path.exists() for path in paths)
 
 
+def test_soft_delete_keeps_assets_until_purge(
+    client,
+    admin,
+    memory_with_attached_file,
+    qdrant_index: QdrantIndex,
+    neo4j_index: Neo4jIndex,
+    run_worker_once,
+    session_factory,
+) -> None:
+    paths = [Path(p) for p in memory_with_attached_file.metadata_["asset_paths"]]
+    response = client.delete(f"/api/v1/memories/{memory_with_attached_file.id}")
+    assert response.status_code == 204, response.text
+
+    dispatch_outbox()
+    run_worker_once()
+
+    assert qdrant_index.get(memory_with_attached_file.id) is None
+    assert neo4j_index.get(memory_with_attached_file.id) is None
+    assert all(path.exists() for path in paths)
+    with session_factory() as session:
+        memory = session.get(Memory, memory_with_attached_file.id)
+        assert memory.status == "deleted"
+        assert memory.metadata_["asset_paths"] == [
+            str(path) for path in paths
+        ]
+
+
+def test_hard_delete_is_idempotent_and_has_no_second_side_effect(
+    client,
+    admin,
+    memory_with_attached_file,
+    session_factory,
+) -> None:
+    paths = [Path(p) for p in memory_with_attached_file.metadata_["asset_paths"]]
+    first = client.delete(
+        f"/api/v1/memories/{memory_with_attached_file.id}?hard=true&confirm=true"
+    )
+    assert first.status_code == 200, first.text
+    second = client.delete(
+        f"/api/v1/memories/{memory_with_attached_file.id}?hard=true&confirm=true"
+    )
+    assert second.status_code == 404, second.text
+
+    with session_factory() as session:
+        memory = session.get(Memory, memory_with_attached_file.id)
+        assert memory.status == "purged"
+        events = session.scalar(
+            select(func.count())
+            .select_from(OutboxEvent)
+            .where(
+                OutboxEvent.aggregate_id == memory_with_attached_file.id,
+                OutboxEvent.event_type == "memory.deleted",
+            )
+        )
+        audits = session.scalar(
+            select(func.count())
+            .select_from(AuditLog)
+            .where(
+                AuditLog.target_id == memory_with_attached_file.id,
+                AuditLog.action == "memory.deleted",
+            )
+        )
+        assert events == 1
+        assert audits == 1
+    assert all(not path.exists() for path in paths)
+
+
 def test_purge_worker_cascades_indexes_and_assets(
     memory_with_attached_file,
     qdrant_index: QdrantIndex,
@@ -307,10 +408,45 @@ def memory(db_session: Session) -> Memory:
     return row
 
 
+@pytest.fixture()
+def reconcile_runtime(db_session: Session, qdrant_index: QdrantIndex):
+    configure_runtime(
+        Runtime(
+            session_scope=lambda: nullcontext(db_session),
+            embedding=FakeEmbedding(dim=qdrant_index.dim),
+            qdrant=qdrant_index,
+            neo4j=None,
+            eager=True,
+        )
+    )
+    try:
+        yield
+    finally:
+        reset_runtime()
+
+
+@pytest.fixture()
+def broken_embedding_runtime(db_session: Session, qdrant_index: QdrantIndex):
+    configure_runtime(
+        Runtime(
+            session_scope=lambda: nullcontext(db_session),
+            embedding=BrokenEmbedding(),
+            qdrant=qdrant_index,
+            neo4j=None,
+            eager=True,
+        )
+    )
+    try:
+        yield
+    finally:
+        reset_runtime()
+
+
 def test_reconcile_reports_and_repairs_missing_points(
     db_session: Session,
     memory: Memory,
     qdrant_index: QdrantIndex,
+    reconcile_runtime,
 ) -> None:
     qdrant_index.delete(memory.id)
     report = reconcile_indexes(db_session, qdrant_index, None, sample=10)
@@ -323,9 +459,70 @@ def test_reconcile_is_idempotent_after_repair(
     db_session: Session,
     memory: Memory,
     qdrant_index: QdrantIndex,
+    reconcile_runtime,
 ) -> None:
     qdrant_index.delete(memory.id)
     assert reconcile_indexes(db_session, qdrant_index, None, sample=10).repaired == 1
     second = reconcile_indexes(db_session, qdrant_index, None, sample=10)
     assert second.repaired == 0
     assert second.missing_after == 0
+
+
+def test_reconcile_does_not_write_fallback_vector_when_embedding_fails(
+    db_session: Session,
+    memory: Memory,
+    qdrant_index: QdrantIndex,
+    broken_embedding_runtime,
+) -> None:
+    qdrant_index.delete(memory.id)
+    report = reconcile_indexes(db_session, qdrant_index, None, sample=10)
+
+    assert report.repaired == 0
+    assert report.failed >= 1
+    assert report.missing_after >= 1
+    assert qdrant_index.get(memory.id) is None
+    assert (
+        db_session.scalar(
+            select(ProjectionState).where(
+                ProjectionState.memory_id == memory.id
+            )
+        )
+        is None
+    )
+
+
+def test_reconcile_cleans_purged_neo4j_and_assets_without_outbox(
+    db_session: Session,
+    qdrant_index: QdrantIndex,
+    neo4j_index: Neo4jIndex,
+    tmp_path,
+) -> None:
+    attached = tmp_path / "purged-asset.txt"
+    attached.write_bytes(b"still here")
+    purged = _memory(
+        str(uuid4()),
+        workspace_id="ws-purged",
+        status="purged",
+        deleted_at=NOW - timedelta(days=31),
+        metadata={"asset_paths": [str(attached)]},
+    )
+    db_session.add(purged)
+    db_session.flush()
+    neo4j_index.upsert_memory(purged)
+    assert neo4j_index.get(purged.id) is not None
+
+    report = reconcile_indexes(
+        db_session, qdrant_index, neo4j_index, sample=10
+    )
+    assert report.purged_checked == 1
+    assert report.purged_cleaned == 1
+    assert report.purged_failed == 0
+    assert neo4j_index.get(purged.id) is None
+    assert not attached.exists()
+
+    # 再次对账没有可清理对象，也不会重复计失败。
+    again = reconcile_indexes(
+        db_session, qdrant_index, neo4j_index, sample=10
+    )
+    assert again.purged_cleaned == 0
+    assert again.purged_failed == 0

@@ -456,10 +456,14 @@ def _run_neo4j_step(runtime: Runtime, memory_id: str, version: int | None) -> No
 
 
 def _cleanup_removed_assets(runtime: Runtime, memory_id: str) -> int:
-    """删除已 purged 记忆的资产文件；重复执行安全。"""
+    """删除已 purged 记忆的资产文件；软删阶段必须保留 30 天。
+
+    软删除只移除 Qdrant/Neo4j 投影；``deleted_at`` 保留期内文件仍可恢复，
+    只有 ``status="purged"`` 才物理删除资产。重复执行安全。
+    """
     with runtime.session_scope() as db:
         memory = db.get(Memory, memory_id)
-        if memory is None or memory.status not in _REMOVED_STATUSES:
+        if memory is None or memory.status != "purged":
             return 0
         paths = lifecycle_service.memory_asset_paths(memory)
     removed = lifecycle_service.delete_asset_paths(paths)

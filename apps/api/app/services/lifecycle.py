@@ -16,9 +16,7 @@
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import logging
-import math
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -265,13 +263,16 @@ def prune_ops_history(
 # ---------------------------------------------------------------------------
 
 
-def delete_asset_paths(paths: Iterable[Any] | None) -> int:
-    """删除 ``metadata.asset_paths`` 指向的普通文件；不存在时跳过。
+def delete_asset_paths_with_report(
+    paths: Iterable[Any] | None,
+) -> tuple[int, int]:
+    """删除资产文件并返回 ``(删除数, 失败数)``；不存在时跳过。
 
     M1 没有独立资产表，路径是内部写入的绝对路径；M3 上线后由资产表接管。
-    删除动作幂等，重复执行不会报错。
+    删除动作幂等，重复执行不会报错；失败计数供对账报告使用。
     """
     removed = 0
+    failed = 0
     for raw in paths or ():
         if not raw:
             continue
@@ -282,8 +283,14 @@ def delete_asset_paths(paths: Iterable[Any] | None) -> int:
             path.unlink(missing_ok=True)
             removed += 1
         except OSError:
+            failed += 1
             logger.warning("failed to delete asset file", extra={"path": str(raw)})
-    return removed
+    return removed, failed
+
+
+def delete_asset_paths(paths: Iterable[Any] | None) -> int:
+    """删除 ``metadata.asset_paths`` 指向的普通文件，返回删除数。"""
+    return delete_asset_paths_with_report(paths)[0]
 
 
 def memory_asset_paths(memory: Memory | None) -> list[str]:
@@ -347,6 +354,9 @@ class ReconcileReport:
     failed: int = 0
     missing_after: int = 0
     orphans_removed: int = 0
+    purged_checked: int = 0
+    purged_cleaned: int = 0
+    purged_failed: int = 0
     workspaces: dict[str, dict[str, int]] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -358,6 +368,9 @@ class ReconcileReport:
             "failed": self.failed,
             "missing_after": self.missing_after,
             "orphans_removed": self.orphans_removed,
+            "purged_checked": self.purged_checked,
+            "purged_cleaned": self.purged_cleaned,
+            "purged_failed": self.purged_failed,
             "workspaces": self.workspaces,
         }
 
@@ -368,53 +381,55 @@ def _qdrant_identity(qdrant: Any) -> str:
     return f"{provider}:{model}"
 
 
-def _fallback_vector(memory: Memory, dim: int) -> list[float]:
-    """没有嵌入缓存时的确定性兜底向量，保证对账能先补点。"""
-    digest = hashlib.sha256(
-        f"{memory.id}:{memory.content}".encode("utf-8")
-    ).digest()
-    raw = (digest * ((dim * 4) // len(digest) + 1))[: dim * 4]
-    values = [
-        int.from_bytes(raw[index : index + 4], "big") / 2**31 - 1.0
-        for index in range(0, dim * 4, 4)
-    ]
-    norm = math.sqrt(sum(value * value for value in values)) or 1.0
-    return [value / norm for value in values]
+def _memory_vector(
+    db: Session, memory: Memory, qdrant: Any
+) -> list[float] | None:
+    """返回可用于补点的真实嵌入；不可用时返回 ``None``。
 
-
-def _memory_vector(db: Session, memory: Memory, qdrant: Any) -> list[float]:
+    对账绝不写哈希/噪声兜底向量：那会污染检索且 ``projection_state`` 会让
+    后续对账误以为已修复。调用方必须把 ``None`` 计为失败。
+    """
     dim = int(getattr(qdrant, "dim", 0) or 0)
     if dim <= 0:
-        raise ValueError("qdrant 缺少有效维度")
+        logger.warning(
+            "reconcile skipped: qdrant dimension missing",
+            extra={"memory_id": memory.id},
+        )
+        return None
     repo = EmbeddingRepository(db)
     cached = repo.get(memory.id, _qdrant_identity(qdrant))
     if cached is not None and len(cached) == dim:
         return cached
 
-    # worker 里有真实嵌入 Provider 时优先重算，避免长期使用兜底向量。
     from app.jobs.runtime import peek_runtime
 
     runtime = peek_runtime()
-    if runtime is not None and runtime.embedding is not None:
-        try:
-            cached = repo.get(memory.id, runtime.embedding.identity)
-            if cached is None or len(cached) != dim:
-                generated = asyncio.run(
-                    runtime.embedding.embed([memory.content])
-                )[0]
-                if len(generated) == dim:
-                    repo.upsert(
-                        memory.id, runtime.embedding.identity, dim, generated
-                    )
-                    return list(generated)
-            else:
-                return list(cached)
-        except Exception:  # 嵌入失败不能阻止索引补点
+    if runtime is None or runtime.embedding is None:
+        logger.warning(
+            "reconcile skipped: embedding provider unavailable",
+            extra={"memory_id": memory.id},
+        )
+        return None
+    try:
+        cached = repo.get(memory.id, runtime.embedding.identity)
+        if cached is not None and len(cached) == dim:
+            return list(cached)
+        generated = asyncio.run(runtime.embedding.embed([memory.content]))[0]
+        if len(generated) != dim:
             logger.warning(
-                "reconcile embedding failed; using deterministic vector",
+                "reconcile skipped: embedding dimension mismatch",
                 extra={"memory_id": memory.id},
             )
-    return _fallback_vector(memory, dim)
+            return None
+        repo.upsert(memory.id, runtime.embedding.identity, dim, generated)
+        return list(generated)
+    except Exception:
+        logger.warning(
+            "reconcile skipped: embedding generation failed",
+            extra={"memory_id": memory.id},
+            exc_info=True,
+        )
+        return None
 
 
 def _entity_refs(db: Session, memory_id: str) -> list[GraphEntity]:
@@ -474,10 +489,13 @@ def _qdrant_payload(db: Session, memory: Memory) -> dict[str, Any]:
 def _repair_qdrant(
     db: Session, memory: Memory, qdrant: Any
 ) -> bool:
+    vector = _memory_vector(db, memory, qdrant)
+    if vector is None:
+        return False
     try:
         qdrant.upsert(
             memory.id,
-            _memory_vector(db, memory, qdrant),
+            vector,
             _qdrant_payload(db, memory),
         )
     except Exception:
@@ -549,6 +567,55 @@ def _needs_neo4j(memory: Memory, neo4j: Any) -> tuple[bool, bool]:
     return False, node.get("status") != memory.status
 
 
+def _cleanup_purged(
+    db: Session,
+    neo4j: Any,
+    workspace_id: str,
+) -> dict[str, int]:
+    """扫描 purged 行，补删 Neo4j 节点与资产文件。
+
+    不依赖 outbox：worker 重试耗尽进入死信后，这里仍会幂等重试。失败计入
+    ``failed/purged_failed``，供报告与告警；成功后再次运行不会重复计数。
+    """
+    rows = list(
+        db.scalars(
+            select(Memory)
+            .where(
+                Memory.workspace_id == workspace_id,
+                Memory.status == "purged",
+            )
+            .order_by(Memory.id)
+        )
+    )
+    counts = {"checked": len(rows), "cleaned": 0, "failed": 0}
+    for memory in rows:
+        touched = False
+        ok = True
+        if neo4j is not None:
+            try:
+                if neo4j.get(memory.id) is not None:
+                    neo4j.delete(memory.id)
+                    touched = True
+            except Exception:
+                ok = False
+                logger.exception(
+                    "purged neo4j cleanup failed",
+                    extra={"memory_id": memory.id},
+                )
+        removed, failures = delete_asset_paths_with_report(
+            memory_asset_paths(memory)
+        )
+        if removed:
+            touched = True
+        if failures:
+            ok = False
+        if not ok:
+            counts["failed"] += 1
+        elif touched:
+            counts["cleaned"] += 1
+    return counts
+
+
 def _workspace_ids_with_memories(db: Session) -> list[str]:
     """包含已删除/已 purged 的 workspace，便于清理遗留孤儿投影。"""
     return [
@@ -589,6 +656,9 @@ def _reconcile_workspace(
         "failed": 0,
         "missing_after": 0,
         "orphans_removed": 0,
+        "purged_checked": 0,
+        "purged_cleaned": 0,
+        "purged_failed": 0,
     }
 
     for memory in memories:
@@ -619,6 +689,12 @@ def _reconcile_workspace(
         neo4j_missing, _ = _needs_neo4j(memory, neo4j)
         if qdrant_missing or neo4j_missing:
             counts["missing_after"] += 1
+
+    purged = _cleanup_purged(db, neo4j, workspace_id)
+    counts["purged_checked"] = purged["checked"]
+    counts["purged_cleaned"] = purged["cleaned"]
+    counts["purged_failed"] = purged["failed"]
+    counts["failed"] += purged["failed"]
 
     list_ids = getattr(qdrant, "list_ids", None)
     delete_many = getattr(qdrant, "delete_many", None)
@@ -681,10 +757,17 @@ def reconcile_indexes(
         report.failed += counts["failed"]
         report.missing_after += counts["missing_after"]
         report.orphans_removed += counts["orphans_removed"]
+        report.purged_checked += counts["purged_checked"]
+        report.purged_cleaned += counts["purged_cleaned"]
+        report.purged_failed += counts["purged_failed"]
         report.workspaces[current] = counts
-        if counts["checked"]:
+        if counts["checked"] or counts["purged_checked"]:
             db.flush()
-    if report.checked or report.orphans_removed:
+    if (
+        report.checked
+        or report.orphans_removed
+        or report.purged_checked
+    ):
         logger.info(
             "index reconciliation finished",
             extra={
@@ -692,6 +775,8 @@ def reconcile_indexes(
                 "repaired": report.repaired,
                 "missing_after": report.missing_after,
                 "orphans_removed": report.orphans_removed,
+                "purged_cleaned": report.purged_cleaned,
+                "purged_failed": report.purged_failed,
             },
         )
     return report
@@ -703,6 +788,7 @@ __all__ = [
     "cascade_hard_delete",
     "decay_sweep",
     "delete_asset_paths",
+    "delete_asset_paths_with_report",
     "memory_asset_paths",
     "prune_ops_history",
     "purge_deleted",
