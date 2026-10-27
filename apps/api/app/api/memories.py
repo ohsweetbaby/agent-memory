@@ -35,6 +35,10 @@ from app.repositories.outbox import OutboxRepository
 from app.schemas.memory import MemoryWriteRequest, normalize_content
 from app.services.audit import write_audit
 from app.services.encoding import detect_pii
+from app.services.lifecycle import (
+    cascade_hard_delete,
+    memory_asset_paths,
+)
 from app.services.memory_write import (
     emit_memory_event,
     feedback_memory,
@@ -91,7 +95,11 @@ def _load_memory(session: Session, context: AuthContext, memory_id: str) -> Memo
     else:
         # 单管理员会话可跨工作区管理（T8 裁决）；API Key 始终走上面的分支。
         memory = session.get(Memory, memory_id)
-    if memory is None or memory.status == "deleted" or memory.deleted_at is not None:
+    if (
+        memory is None
+        or memory.status in {"deleted", "purged"}
+        or memory.deleted_at is not None
+    ):
         raise NotFoundError("记忆不存在")
     return memory
 
@@ -143,6 +151,63 @@ def _audit_snapshot(memory: Memory) -> dict[str, Any]:
         "valid_to": memory.valid_to.isoformat() if memory.valid_to else None,
         "metadata": memory.metadata_ or {},
     }
+
+
+def _mark_hard_deleted(
+    session: Session,
+    memory: Memory,
+    *,
+    actor_type: str,
+    actor_id: str | None,
+    query: str | None = None,
+) -> tuple[str, list[str]]:
+    """把硬删除落成 ``purged`` 墓碑并写 outbox，返回资产路径。
+
+    规格 §10.4 要求 Postgres 先标记 ``purged``、同事务写 outbox；worker 再
+    清理 Qdrant/Neo4j/资产。保留墓碑使对账与审计仍可追溯，重复硬删除因
+    API 层 404 而天然幂等。
+    """
+    memory_id = memory.id
+    workspace_id = memory.workspace_id
+    asset_paths = memory_asset_paths(memory)
+    metadata = dict(memory.metadata_ or {})
+    metadata["purged_at"] = utcnow().isoformat()
+    before = _audit_snapshot(memory)
+    MemoryRepository(session).update(
+        memory,
+        status="purged",
+        deleted_at=utcnow(),
+        metadata=metadata,
+    )
+    write_audit(
+        session,
+        action="memory.deleted",
+        target_type="memory",
+        target_id=memory_id,
+        workspace_id=workspace_id,
+        actor_type=actor_type,
+        actor_id=actor_id,
+        before=before,
+        after={
+            **_audit_snapshot(memory),
+            "hard": True,
+            "purged": True,
+            **({"query": query} if query else {}),
+        },
+    )
+    OutboxRepository(session).add(
+        "memory.deleted",
+        memory_id,
+        {
+            "memory_id": memory_id,
+            "version": memory.version,
+            "workspace_id": workspace_id,
+            "action": "purged",
+            "hard": True,
+            "asset_paths": asset_paths,
+        },
+    )
+    return memory_id, asset_paths
 
 
 def _history_payload(
@@ -285,7 +350,10 @@ def list_memories(
     if resolved is not None:
         ensure_workspace(session, context, resolved)
         statement = statement.where(Memory.workspace_id == resolved)
-    statement = statement.where(Memory.status != "deleted", Memory.deleted_at.is_(None))
+    statement = statement.where(
+        Memory.status.not_in(("deleted", "purged")),
+        Memory.deleted_at.is_(None),
+    )
     if memory_type is not None:
         statement = statement.where(Memory.type == memory_type)
     if scope is not None:
@@ -474,37 +542,19 @@ def forget_memories(
 
     actor_type, actor_id = audit_actor(context)
     affected: list[str] = []
+    cascades: list[tuple[str, list[str]]] = []
     for memory in memories:
         affected.append(memory.id)
         before = _audit_snapshot(memory)
         if payload.hard:
-            memory_id_value = memory.id
-            workspace_id = memory.workspace_id
-            version = memory.version
-            session.delete(memory)
-            session.flush()
-            write_audit(
+            memory_id_value, asset_paths = _mark_hard_deleted(
                 session,
-                action="memory.deleted",
-                target_type="memory",
-                target_id=memory_id_value,
-                workspace_id=workspace_id,
+                memory,
                 actor_type=actor_type,
                 actor_id=actor_id,
-                before=before,
-                after={"hard": True, "query": query},
+                query=query,
             )
-            OutboxRepository(session).add(
-                "memory.deleted",
-                memory_id_value,
-                {
-                    "memory_id": memory_id_value,
-                    "version": version,
-                    "workspace_id": workspace_id,
-                    "action": "deleted",
-                    "hard": True,
-                },
-            )
+            cascades.append((memory_id_value, asset_paths))
             continue
 
         MemoryRepository(session).update(
@@ -524,6 +574,8 @@ def forget_memories(
         emit_memory_event(session, memory, "deleted", deleted=True)
 
     session.commit()
+    for memory_id_value, asset_paths in cascades:
+        cascade_hard_delete(memory_id_value, asset_paths)
     return {"affected": len(affected), "ids": affected}
 
 
@@ -614,7 +666,6 @@ def delete_memory(
     memory = _load_memory(session, context, memory_id)
     actor_type, actor_id = audit_actor(context)
     before = _audit_snapshot(memory)
-    version = memory.version
 
     if hard:
         if not confirm or not context.has_scope("admin"):
@@ -622,34 +673,21 @@ def delete_memory(
                 "硬删除需要 admin 权限且 confirm=true",
                 code="confirmation_required",
             )
-        memory_id_value = memory.id
-        workspace_id = memory.workspace_id
-        session.delete(memory)
-        session.flush()
-        write_audit(
+        memory_id_value, asset_paths = _mark_hard_deleted(
             session,
-            action="memory.deleted",
-            target_type="memory",
-            target_id=memory_id_value,
-            workspace_id=workspace_id,
+            memory,
             actor_type=actor_type,
             actor_id=actor_id,
-            before=before,
-            after={"hard": True},
-        )
-        OutboxRepository(session).add(
-            "memory.deleted",
-            memory_id_value,
-            {
-                "memory_id": memory_id_value,
-                "version": version,
-                "workspace_id": workspace_id,
-                "action": "deleted",
-                "hard": True,
-            },
         )
         session.commit()
-        return {"id": memory_id_value, "deleted": True, "hard": True}
+        cascade = cascade_hard_delete(memory_id_value, asset_paths)
+        return {
+            "id": memory_id_value,
+            "deleted": True,
+            "hard": True,
+            "status": "purged",
+            "cascade": cascade,
+        }
 
     MemoryRepository(session).update(
         memory, status="deleted", deleted_at=utcnow()

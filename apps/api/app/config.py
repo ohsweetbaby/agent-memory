@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import tempfile
 from functools import lru_cache
 from pathlib import Path
 
@@ -66,6 +67,19 @@ class Settings(BaseSettings):
     consolidation_idle_minutes: int = Field(default=30, ge=1)
     consolidation_nightly_hour: int = Field(default=3, ge=0, le=23)
     consolidation_nightly_minute: int = Field(default=0, ge=0, le=59)
+
+    # 遗忘与清理（规格 §5.4/§11/§12）。
+    decay_base_stability_days: float = Field(default=7.0, gt=0)
+    decay_archive_threshold: float = Field(default=0.15, gt=0, lt=1)
+    decay_sweep_hour: int = Field(default=4, ge=0, le=23)
+    purge_retention_days: int = Field(default=30, ge=1)
+    purge_deleted_hour: int = Field(default=5, ge=0, le=23)
+    audit_retention_days: int = Field(default=180, ge=1)
+    reconcile_sample_size: int = Field(default=100, ge=1)
+    # 导出落到临时目录，生产可用 EXPORT_DIR 指向持久卷。
+    export_dir: Path = Field(
+        default_factory=lambda: Path(tempfile.gettempdir()) / "agent-memory-exports"
+    )
 
     # 检索：M1 默认关闭查询改写；上下文预算与规格 §6.3 保持一致。
     search_query_rewrite: bool = False

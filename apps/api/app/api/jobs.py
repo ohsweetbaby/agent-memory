@@ -21,6 +21,7 @@ from sse_starlette import EventSourceResponse
 
 from app.api.deps import (
     DEFAULT_PAGE_SIZE,
+    audit_actor,
     ensure_workspace,
     paginate,
     resolve_workspace_id,
@@ -30,7 +31,8 @@ from app.auth.session import AuthContext, require_scope
 from app.config import get_current_settings
 from app.db import get_db
 from app.errors import BadRequestError, NotFoundError
-from app.models import JobRun
+from app.jobs.tasks import TASK_EXPORT_WORKSPACE, enqueue
+from app.models import JobRun, Workspace
 from app.models import Session as SessionModel
 from app.schemas.memory import ensure_no_nul
 from app.services.consolidation import (
@@ -41,6 +43,7 @@ from app.services.consolidation import (
     job_channel,
     rollback_run,
 )
+from app.services.export import EXPORT_FORMATS, create_export_job
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +56,7 @@ DEFAULT_WINDOW = timedelta(hours=24)
 class JobRunRequest(BaseModel):
     """``POST /jobs/run`` 的请求体；``params`` 由任务类型解释。"""
 
-    type: Literal["consolidate_session", "consolidate_nightly"]
+    type: Literal["consolidate_session", "consolidate_nightly", "export"]
     params: dict[str, Any] = Field(default_factory=dict)
     dry_run: bool = False
     #: 允许相同窗口重跑（回滚后重新巩固）。
@@ -150,13 +153,64 @@ def get_job(
     return _job_payload(_load_job(session, context, job_id))
 
 
+def _export_workspace_id(
+    session: Session, context: AuthContext, requested: Any
+) -> str:
+    """管理台未指定 workspace 时，仅在唯一工作区场景下自动选择。"""
+    if requested:
+        resolved = resolve_workspace_id(context, str(requested))
+        ensure_workspace(session, context, resolved)
+        return resolved
+    if context.workspace_id is not None:
+        ensure_workspace(session, context, context.workspace_id)
+        return context.workspace_id
+    candidates = list(
+        session.scalars(select(Workspace.id).order_by(Workspace.id).limit(2))
+    )
+    if len(candidates) != 1:
+        raise BadRequestError(
+            "必须指定 workspace_id", code="invalid_request"
+        )
+    return candidates[0]
+
+
 @router.post("/run")
 def run_job(
     payload: JobRunRequest,
     context: AuthContext = Depends(require_scope("admin")),
     session: Session = Depends(get_db),
 ) -> dict[str, Any]:
-    """同步执行一次巩固；``dry_run`` 只返回差异，不创建 job_run。"""
+    """触发后台任务：巩固同步执行，导出创建异步 job 后返回 job_id。"""
+    if payload.type == "export":
+        if payload.dry_run:
+            raise BadRequestError(
+                "导出不支持 dry_run", code="invalid_request"
+            )
+        fmt = str(payload.params.get("format") or "json").lower()
+        if fmt not in EXPORT_FORMATS:
+            raise BadRequestError(
+                "导出格式必须是 json 或 md", code="invalid_format"
+            )
+        workspace_id = _export_workspace_id(
+            session, context, payload.params.get("workspace_id")
+        )
+        actor_type, actor_id = audit_actor(context)
+        job = create_export_job(
+            session,
+            workspace_id,
+            fmt,  # type: ignore[arg-type]
+            actor_type=actor_type,
+            actor_id=actor_id,
+        )
+        session.commit()
+        enqueue(TASK_EXPORT_WORKSPACE, job.id)
+        return {
+            "job_id": job.id,
+            "type": "export",
+            "status": job.status,
+            "params": job.params,
+        }
+
     if payload.type not in CONSOLIDATION_JOB_TYPES:
         raise BadRequestError("不支持的任务类型", code="unsupported_job_type")
 

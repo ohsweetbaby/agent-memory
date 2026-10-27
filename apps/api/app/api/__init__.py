@@ -5,6 +5,7 @@ from __future__ import annotations
 from app.api import (
     agents,
     auth,
+    export,
     ingest,
     jobs,
     keys,
@@ -27,6 +28,7 @@ ROUTERS = (
     review.router,
     ingest.router,
     jobs.router,
+    export.router,
 )
 
 __all__ = ["ROUTERS"]

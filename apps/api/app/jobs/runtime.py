@@ -87,6 +87,15 @@ def build_runtime(settings: Settings | None = None) -> Runtime:
     )
 
 
+def peek_runtime() -> Runtime | None:
+    """返回已注入的运行时；不会触发外部客户端构建。
+
+    API 进程在硬删除时只做“已配置运行时”的同步级联，生产环境仍由 outbox
+    worker 兜底；未配置时返回 ``None``，避免请求线程连接外部服务。
+    """
+    return _runtime
+
+
 def get_runtime() -> Runtime:
     global _runtime
     if _runtime is None:
@@ -95,4 +104,11 @@ def get_runtime() -> Runtime:
     return _runtime
 
 
-__all__ = ["Runtime", "build_runtime", "configure_runtime", "get_runtime", "reset_runtime"]
+__all__ = [
+    "Runtime",
+    "build_runtime",
+    "configure_runtime",
+    "get_runtime",
+    "peek_runtime",
+    "reset_runtime",
+]

@@ -16,8 +16,9 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections import deque
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any, NoReturn
+from uuid import NAMESPACE_URL, uuid5
 
 from celery.exceptions import Retry
 from sqlalchemy import and_, or_, select, update
@@ -35,10 +36,12 @@ from app.models import (
     MemoryLink,
     OutboxEvent,
     ProjectionState,
+    Workspace,
 )
 from app.models.base import utcnow
 from app.repositories.embedding import EmbeddingRepository
 from app.repositories.outbox import OutboxRepository
+from app.services import lifecycle as lifecycle_service
 from app.services.audit import write_audit
 
 logger = logging.getLogger(__name__)
@@ -58,6 +61,11 @@ TASK_EXTRACT_CONVERSATION = "app.jobs.tasks.extract_conversation"
 TASK_CONSOLIDATE_SESSION = "app.jobs.tasks.consolidate_session"
 TASK_CONSOLIDATE_NIGHTLY = "app.jobs.tasks.consolidate_nightly"
 TASK_CONSOLIDATE_IDLE = "app.jobs.tasks.consolidate_idle_sessions"
+TASK_DECAY_SWEEP = "app.jobs.tasks.decay_sweep"
+TASK_PURGE_DELETED = "app.jobs.tasks.purge_deleted"
+TASK_PRUNE_OPS_HISTORY = "app.jobs.tasks.prune_ops_history"
+TASK_RECONCILE_INDEXES = "app.jobs.tasks.reconcile_indexes"
+TASK_EXPORT_WORKSPACE = "app.jobs.tasks.export_workspace"
 
 NEO4J_TARGET = "neo4j"
 
@@ -90,9 +98,14 @@ _CONSOLIDATE_OPTIONS: dict[str, Any] = dict(_EXTRACT_OPTIONS)
 
 
 def enqueue(task_name: str, *args: Any) -> None:
-    """投递任务；eager 模式只入内存队列，等待 :func:`run_worker_once`。"""
-    runtime = get_runtime()
-    if runtime.eager:
+    """投递任务；eager 模式只入内存队列，等待 :func:`run_worker_once`。
+
+    API 进程通常没有注入运行时；这里不能为了判断 eager 而构建外部客户端。
+    """
+    from app.jobs.runtime import peek_runtime
+
+    runtime = peek_runtime()
+    if runtime is not None and runtime.eager:
         _PENDING.append((task_name, args))
         return
     celery_app.send_task(task_name, args=list(args))
@@ -254,9 +267,8 @@ def project_qdrant_record(
     runtime = get_runtime()
     target = qdrant_target(runtime.qdrant)
     target_version = int(version or memory.version)
-    if not force and _projected_version(db, memory.id, target) >= target_version:
-        return False
 
+    # 删除优先于版本短路：即使事件版本已投影过，也要保证外部索引无残留。
     if _is_removed(memory):
         runtime.qdrant.delete(memory.id)
         mark_projected(db, memory.id, target, target_version)
@@ -265,6 +277,9 @@ def project_qdrant_record(
             extra={"memory_id": memory.id},
         )
         return True
+
+    if not force and _projected_version(db, memory.id, target) >= target_version:
+        return False
 
     vector = _ensure_embedding(
         runtime, db, memory, force=force or refresh_embedding
@@ -297,9 +312,8 @@ def project_neo4j_record(
         return False
 
     target_version = int(version or memory.version)
-    if not force and _projected_version(db, memory.id, NEO4J_TARGET) >= target_version:
-        return False
 
+    # 与 Qdrant 相同：删除请求不受幂等版本短路影响，重复删除安全。
     if _is_removed(memory):
         runtime.neo4j.delete(memory.id)
         mark_projected(db, memory.id, NEO4J_TARGET, target_version)
@@ -308,6 +322,9 @@ def project_neo4j_record(
             extra={"memory_id": memory.id},
         )
         return True
+
+    if not force and _projected_version(db, memory.id, NEO4J_TARGET) >= target_version:
+        return False
 
     entities = _entity_refs(db, memory.id)
     links = _links(db, memory.id)
@@ -438,6 +455,22 @@ def _run_neo4j_step(runtime: Runtime, memory_id: str, version: int | None) -> No
         db.commit()
 
 
+def _cleanup_removed_assets(runtime: Runtime, memory_id: str) -> int:
+    """删除已 purged 记忆的资产文件；重复执行安全。"""
+    with runtime.session_scope() as db:
+        memory = db.get(Memory, memory_id)
+        if memory is None or memory.status not in _REMOVED_STATUSES:
+            return 0
+        paths = lifecycle_service.memory_asset_paths(memory)
+    removed = lifecycle_service.delete_asset_paths(paths)
+    if removed:
+        logger.info(
+            "removed assets for purged memory",
+            extra={"memory_id": memory_id, "count": removed},
+        )
+    return removed
+
+
 def _project_one(runtime: Runtime, memory_id: str, version: int | None) -> None:
     """依次投影 Qdrant / Neo4j；任一步失败都会留下可查询的 error。"""
     qtarget = qdrant_target(runtime.qdrant)
@@ -508,6 +541,7 @@ def project_memory(
     try:
         _touch_event_lease(runtime, event_id)
         _project_one(runtime, memory_id, version)
+        _cleanup_removed_assets(runtime, memory_id)
         _mark_event_done(runtime, event_id)
         return True
     except Retry:
@@ -792,22 +826,391 @@ def consolidate_idle_sessions(self: Any, limit: int = 50) -> int:
         _retry_or_reraise(self, exc)
 
 
+def _lifecycle_now(value: str | None) -> datetime:
+    if not value:
+        return utcnow()
+    parsed = datetime.fromisoformat(value)
+    return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)
+
+
+def _workspace_ids(runtime: Runtime) -> list[str]:
+    """显式列出 workspace；跨租户任务逐区执行，绝不使用空 workspace 查询。"""
+    with runtime.session_scope() as db:
+        return [
+            str(value)
+            for value in db.scalars(select(Workspace.id).order_by(Workspace.id))
+        ]
+
+
+def _begin_lifecycle_job(
+    db: Session,
+    task_type: str,
+    workspace_id: str,
+    key: str,
+    params: dict[str, Any],
+):
+    """按 (task_type, workspace, key) 派生稳定 job id，重复触发复用同一行。"""
+    job_id = str(
+        uuid5(NAMESPACE_URL, f"lifecycle:{task_type}:{workspace_id}:{key}")
+    )
+    job = db.get(JobRun, job_id)
+    if job is None:
+        job = JobRun(id=job_id, type=task_type, scope=workspace_id, params=params)
+        db.add(job)
+    job.params = params
+    job.status = "running"
+    job.started_at = utcnow()
+    job.finished_at = None
+    job.error = None
+    db.flush()
+    return job
+
+
+def _finish_lifecycle_job(db: Session, job: JobRun, result: dict[str, Any]) -> None:
+    job.status = "completed"
+    job.result = result
+    job.finished_at = utcnow()
+    db.flush()
+
+
+@celery_app.task(bind=True, name=TASK_DECAY_SWEEP, **_EXTRACT_OPTIONS)
+def decay_sweep(
+    self: Any,
+    now: str | None = None,
+    base_stability_days: float | None = None,
+    archive_threshold: float | None = None,
+) -> dict[str, int]:
+    """beat 每日 04:00：逐 workspace 归档低保留率记忆。"""
+    from app.config import get_current_settings
+    from memory_core.decay import DecayParams
+
+    settings = get_current_settings()
+    when = _lifecycle_now(now)
+    params = DecayParams(
+        base_stability_days=base_stability_days
+        if base_stability_days is not None
+        else settings.decay_base_stability_days,
+        archive_threshold=archive_threshold
+        if archive_threshold is not None
+        else settings.decay_archive_threshold,
+    )
+    runtime = get_runtime()
+    results: dict[str, int] = {}
+    try:
+        for workspace_id in _workspace_ids(runtime):
+            key = when.date().isoformat()
+            with runtime.session_scope() as db:
+                job = _begin_lifecycle_job(
+                    db,
+                    TASK_DECAY_SWEEP,
+                    workspace_id,
+                    key,
+                    {
+                        "workspace_id": workspace_id,
+                        "date": key,
+                        "base_stability_days": params.base_stability_days,
+                        "archive_threshold": params.archive_threshold,
+                    },
+                )
+                count = lifecycle_service.decay_sweep(
+                    db, when, params, workspace_id=workspace_id
+                )
+                result = {"archived": count, "at": when.isoformat()}
+                _finish_lifecycle_job(db, job, result)
+                write_audit(
+                    db,
+                    action="decay.completed",
+                    target_type="job",
+                    target_id=job.id,
+                    workspace_id=workspace_id,
+                    actor_type="system",
+                    after=result,
+                )
+                db.commit()
+            results[workspace_id] = count
+        return results
+    except Retry:
+        raise
+    except Exception as exc:
+        _retry_or_reraise(self, exc)
+
+
+@celery_app.task(bind=True, name=TASK_PURGE_DELETED, **_EXTRACT_OPTIONS)
+def purge_deleted(
+    self: Any, now: str | None = None, retention_days: int | None = None
+) -> dict[str, int]:
+    """beat 每日 05:00：把超过保留期的软删记忆置为 purged 并写 outbox。"""
+    from app.config import get_current_settings
+
+    settings = get_current_settings()
+    when = _lifecycle_now(now)
+    days = (
+        retention_days
+        if retention_days is not None
+        else settings.purge_retention_days
+    )
+    runtime = get_runtime()
+    results: dict[str, int] = {}
+    try:
+        for workspace_id in _workspace_ids(runtime):
+            key = when.date().isoformat()
+            with runtime.session_scope() as db:
+                job = _begin_lifecycle_job(
+                    db,
+                    TASK_PURGE_DELETED,
+                    workspace_id,
+                    key,
+                    {
+                        "workspace_id": workspace_id,
+                        "date": key,
+                        "retention_days": days,
+                    },
+                )
+                count = lifecycle_service.purge_deleted(
+                    db, when, days, workspace_id=workspace_id
+                )
+                result = {
+                    "purged": count,
+                    "retention_days": days,
+                    "at": when.isoformat(),
+                }
+                _finish_lifecycle_job(db, job, result)
+                write_audit(
+                    db,
+                    action="purge.completed",
+                    target_type="job",
+                    target_id=job.id,
+                    workspace_id=workspace_id,
+                    actor_type="system",
+                    after=result,
+                )
+                db.commit()
+            results[workspace_id] = count
+        return results
+    except Retry:
+        raise
+    except Exception as exc:
+        _retry_or_reraise(self, exc)
+
+
+@celery_app.task(bind=True, name=TASK_PRUNE_OPS_HISTORY, **_EXTRACT_OPTIONS)
+def prune_ops_history(
+    self: Any,
+    now: str | None = None,
+    audit_days: int | None = None,
+    review_days: int | None = None,
+) -> dict[str, int]:
+    """beat 每日 05:00：裁剪 180 天前审计与 90 天前待审项。"""
+    from app.config import get_current_settings
+
+    settings = get_current_settings()
+    when = _lifecycle_now(now)
+    audit_retention = (
+        audit_days if audit_days is not None else settings.audit_retention_days
+    )
+    review_retention = (
+        review_days if review_days is not None else settings.review_retention_days
+    )
+    runtime = get_runtime()
+    results: dict[str, int] = {}
+    try:
+        for workspace_id in _workspace_ids(runtime):
+            key = when.date().isoformat()
+            with runtime.session_scope() as db:
+                job = _begin_lifecycle_job(
+                    db,
+                    TASK_PRUNE_OPS_HISTORY,
+                    workspace_id,
+                    key,
+                    {
+                        "workspace_id": workspace_id,
+                        "date": key,
+                        "audit_days": audit_retention,
+                        "review_days": review_retention,
+                    },
+                )
+                count = lifecycle_service.prune_ops_history(
+                    db,
+                    when,
+                    audit_retention,
+                    review_retention,
+                    workspace_id=workspace_id,
+                )
+                result = {
+                    "removed": count,
+                    "audit_days": audit_retention,
+                    "review_days": review_retention,
+                    "at": when.isoformat(),
+                }
+                _finish_lifecycle_job(db, job, result)
+                write_audit(
+                    db,
+                    action="ops.pruned",
+                    target_type="job",
+                    target_id=job.id,
+                    workspace_id=workspace_id,
+                    actor_type="system",
+                    after=result,
+                )
+                db.commit()
+            results[workspace_id] = count
+        return results
+    except Retry:
+        raise
+    except Exception as exc:
+        _retry_or_reraise(self, exc)
+
+
+@celery_app.task(bind=True, name=TASK_RECONCILE_INDEXES, **_EXTRACT_OPTIONS)
+def reconcile_indexes(self: Any, sample: int | None = None) -> dict[str, Any]:
+    """beat 每小时：逐 workspace 抽样对账并修复投影。"""
+    from app.config import get_current_settings
+
+    settings = get_current_settings()
+    size = sample if sample is not None else settings.reconcile_sample_size
+    runtime = get_runtime()
+    started = utcnow()
+    key = started.strftime("%Y-%m-%dT%H")
+    report: dict[str, Any] = {}
+    try:
+        for workspace_id in _workspace_ids(runtime):
+            with runtime.session_scope() as db:
+                job = _begin_lifecycle_job(
+                    db,
+                    TASK_RECONCILE_INDEXES,
+                    workspace_id,
+                    key,
+                    {"workspace_id": workspace_id, "window": key, "sample": size},
+                )
+                result = lifecycle_service.reconcile_indexes(
+                    db,
+                    runtime.qdrant,
+                    runtime.neo4j,
+                    sample=size,
+                    workspace_id=workspace_id,
+                )
+                payload = result.to_dict()
+                _finish_lifecycle_job(db, job, payload)
+                write_audit(
+                    db,
+                    action="reconcile.completed",
+                    target_type="job",
+                    target_id=job.id,
+                    workspace_id=workspace_id,
+                    actor_type="system",
+                    after=payload,
+                )
+                db.commit()
+            report[workspace_id] = payload
+        return report
+    except Retry:
+        raise
+    except Exception as exc:
+        _retry_or_reraise(self, exc)
+
+
+@celery_app.task(bind=True, name=TASK_EXPORT_WORKSPACE, **_EXTRACT_OPTIONS)
+def export_workspace(self: Any, job_id: str) -> dict[str, Any] | None:
+    """执行工作区导出；完成/失败都回写 job_run 与审计。"""
+    from app.services import export as export_service
+
+    runtime = get_runtime()
+    try:
+        with runtime.session_scope() as db:
+            job = db.get(JobRun, job_id)
+            if job is None:
+                logger.warning("export job missing", extra={"job_id": job_id})
+                return None
+            if job.status == "completed" and job.result:
+                return dict(job.result)
+            params = dict(job.params or {})
+            workspace_id = params.get("workspace_id")
+            fmt = str(params.get("format") or "json")
+            job.status = "running"
+            job.started_at = utcnow()
+            job.error = None
+            db.commit()
+            export_service.publish_job(
+                job_id, {"job_id": job_id, "status": "running", "type": "export"}
+            )
+
+            try:
+                path = export_service.export_workspace(db, workspace_id, fmt)
+            except Exception as exc:
+                message = (str(exc) or exc.__class__.__name__)[:2000]
+                job.status = "failed"
+                job.error = message
+                job.finished_at = utcnow()
+                job.result = {**(job.result or {}), "error": message}
+                write_audit(
+                    db,
+                    action="export.failed",
+                    target_type="export",
+                    target_id=job_id,
+                    workspace_id=workspace_id,
+                    actor_type=str(params.get("actor_type") or "system"),
+                    actor_id=params.get("actor_id"),
+                    after={"error": message},
+                )
+                db.commit()
+                export_service.publish_job(
+                    job_id,
+                    {"job_id": job_id, "status": "failed", "error": message},
+                )
+                raise
+
+            result = {
+                "path": str(path),
+                "format": fmt,
+                "workspace_id": workspace_id,
+                "bytes": path.stat().st_size,
+            }
+            job.status = "completed"
+            job.result = result
+            job.finished_at = utcnow()
+            write_audit(
+                db,
+                action="export.completed",
+                target_type="export",
+                target_id=job_id,
+                workspace_id=workspace_id,
+                actor_type=str(params.get("actor_type") or "system"),
+                actor_id=params.get("actor_id"),
+                after=result,
+            )
+            db.commit()
+            export_service.publish_job(
+                job_id,
+                {"job_id": job_id, "status": "completed", "result": result},
+            )
+            return result
+    except Retry:
+        raise
+    except Exception as exc:
+        _retry_or_reraise(self, exc)
+
+
 __all__ = [
     "consolidate_idle_sessions",
     "consolidate_nightly",
     "consolidate_session",
+    "decay_sweep",
     "dispatch_outbox",
     "embed_memory",
     "enqueue",
+    "export_workspace",
     "extract_conversation",
     "heal_projection_identity",
     "mark_projected",
+    "prune_ops_history",
     "project_memory",
     "project_neo4j",
     "project_neo4j_record",
     "project_qdrant",
     "project_qdrant_record",
+    "purge_deleted",
     "qdrant_target",
+    "reconcile_indexes",
     "reset_pending",
     "run_worker_once",
 ]
