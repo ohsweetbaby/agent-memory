@@ -89,14 +89,20 @@ class OutboxRepository:
     def dead_letter_exhausted(
         self, *, max_attempts: int = DEFAULT_MAX_ATTEMPTS
     ) -> int:
-        """把重试次数耗尽的事件标记为死信，返回本次数量。
+        """把租约已过期且重试耗尽的 processing 事件标记为死信。
+
+        - 未过期的 ``processing`` 可能仍有 worker 正在执行最后一次尝试，
+          不能被提前杀掉；等租约到期后再判断。
+        - ``done`` / ``pending`` 不受影响。
 
         保留最后一次失败原因：任务内失败会写 ``payload.last_error``；这里
         为租约反复过期（worker 崩溃）的事件补一条可诊断的说明。
         """
+        now = datetime.now(UTC)
         stmt = select(OutboxEvent).where(
-            OutboxEvent.status.in_(("pending", "processing")),
+            OutboxEvent.status == "processing",
             OutboxEvent.attempts >= max_attempts,
+            OutboxEvent.next_attempt_at < now,
         )
         events = list(self.session.scalars(stmt))
         for event in events:
@@ -105,10 +111,10 @@ class OutboxRepository:
                 "last_error",
                 f"outbox lease expired after {event.attempts} attempts",
             )
-            payload["failed_at"] = datetime.now(UTC).isoformat()
+            payload["failed_at"] = now.isoformat()
             event.payload = payload
             event.status = "dead"
-            event.next_attempt_at = datetime.now(UTC)
+            event.next_attempt_at = now
         if events:
             self.session.flush()
         return len(events)

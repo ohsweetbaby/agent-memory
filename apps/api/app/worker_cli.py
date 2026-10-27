@@ -2,11 +2,12 @@
 
 用法::
 
-    python -m app.worker_cli rebuild --target qdrant|neo4j|all [--workspace WS]
+    python -m app.worker_cli rebuild --target qdrant|neo4j|all --workspace WS
+    python -m app.worker_cli rebuild --target qdrant|neo4j|all --all
 
-重建按 workspace 收窄时只影响该 workspace：Qdrant 先按 id upsert 再清理
-孤儿 point，Neo4j 只删除带该 ``workspace_id`` 的节点，``projection_state``
-也只清理该 workspace。不传 ``--workspace`` 时才是全量重建。
+``--workspace`` 与 ``--all`` 必须显式二选一：前者只影响该 workspace，
+后者才跨租户全量重建并打印警告。Qdrant 重建先按 id upsert 再清理孤儿
+point；Neo4j 按 workspace 删除节点；``projection_state`` 同步收窄。
 """
 
 from __future__ import annotations
@@ -14,6 +15,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import sys
 from collections.abc import Sequence
 
 from sqlalchemy import delete, select
@@ -144,34 +146,45 @@ def run_rebuild(
     target: str,
     *,
     workspace: str | None = None,
+    all_workspaces: bool = False,
     batch_size: int = 200,
     runtime: Runtime | None = None,
 ) -> dict[str, int]:
-    """重建指定目标；``workspace`` 为 None 时全量重建。"""
+    """重建指定目标。
+
+    必须显式二选一：``workspace`` 只重建单个 workspace；``all_workspaces``
+    才执行跨租户全量重建。两者同时或缺省都拒绝执行。
+    """
     normalized = target.strip().lower()
     if normalized not in _TARGETS:
         raise ValueError(f"不支持的目标: {target!r}，可选 {', '.join(_TARGETS)}")
+    if all_workspaces and workspace is not None:
+        raise ValueError("workspace 与 all_workspaces 不能同时指定")
+    if not all_workspaces and workspace is None:
+        raise ValueError("必须指定 workspace 或显式传入 all_workspaces")
+    if workspace is not None:
+        workspace = workspace.strip()
+        if not workspace:
+            raise ValueError("workspace 不能为空或空白")
+
     resolved = runtime or get_runtime()
+    scope = None if all_workspaces else workspace
     result: dict[str, int] = {}
 
     if normalized in {"qdrant", "all"}:
         with resolved.session_scope() as db:
-            result["qdrant"] = _replay_qdrant(
-                db, resolved, batch_size, workspace
-            )
+            result["qdrant"] = _replay_qdrant(db, resolved, batch_size, scope)
         logger.info(
             "qdrant rebuild finished",
-            extra={"workspace_id": workspace, "count": result["qdrant"]},
+            extra={"workspace_id": scope, "count": result["qdrant"]},
         )
 
     if normalized in {"neo4j", "all"}:
         with resolved.session_scope() as db:
-            result["neo4j"] = _replay_neo4j(
-                db, resolved, batch_size, workspace
-            )
+            result["neo4j"] = _replay_neo4j(db, resolved, batch_size, scope)
         logger.info(
             "neo4j rebuild finished",
-            extra={"workspace_id": workspace, "count": result["neo4j"]},
+            extra={"workspace_id": scope, "count": result["neo4j"]},
         )
 
     return result
@@ -187,10 +200,17 @@ def _build_parser() -> argparse.ArgumentParser:
         choices=list(_TARGETS),
         help="要重建的索引",
     )
-    rebuild.add_argument(
+    scope = rebuild.add_mutually_exclusive_group(required=True)
+    scope.add_argument(
         "--workspace",
         default=None,
-        help="只重建指定 workspace；省略时全量重建",
+        help="只重建指定 workspace（不能为空）",
+    )
+    scope.add_argument(
+        "--all",
+        action="store_true",
+        dest="all_workspaces",
+        help="跨租户全量重建；会重写所有 workspace 的索引",
     )
     rebuild.add_argument(
         "--batch-size",
@@ -202,15 +222,29 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    args = _build_parser().parse_args(argv)
-    configure_logging(get_settings().log_level)
+    parser = _build_parser()
+    args = parser.parse_args(argv)
 
     if args.command == "rebuild":
+        workspace = args.workspace
+        if workspace is not None:
+            workspace = workspace.strip()
+            if not workspace:
+                parser.error("--workspace 不能为空或空白")
+        configure_logging(get_settings().log_level)
+        if args.all_workspaces:
+            print(
+                "WARNING: 正在跨租户全量重建索引，"
+                "将重写所有 workspace 的 Qdrant/Neo4j 投影。",
+                file=sys.stderr,
+            )
+
         runtime = build_runtime()
         try:
             result = run_rebuild(
                 args.target,
-                workspace=args.workspace,
+                workspace=workspace,
+                all_workspaces=args.all_workspaces,
                 batch_size=args.batch_size,
                 runtime=runtime,
             )
@@ -220,7 +254,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             json.dumps(
                 {
                     "target": args.target,
-                    "workspace": args.workspace,
+                    "workspace": workspace,
+                    "all_workspaces": args.all_workspaces,
                     **result,
                 },
                 ensure_ascii=False,

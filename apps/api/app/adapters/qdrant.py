@@ -247,11 +247,33 @@ class QdrantIndex:
             wait=True,
         )
 
+    @staticmethod
+    def _require_workspace(workspace_id: str) -> str:
+        if not isinstance(workspace_id, str) or not workspace_id.strip():
+            raise ValueError("workspace_id 不能为空或空白")
+        return workspace_id.strip()
+
+    def delete_by_workspace(self, workspace_id: str) -> None:
+        """删除某 workspace 的全部 point；空/空白 workspace 必须拒绝。"""
+        normalized = self._require_workspace(workspace_id)
+        if not self.exists():
+            return
+        self._client.delete(
+            collection_name=self.collection,
+            points_selector=models.FilterSelector(
+                filter=self._build_filter({"workspace_id": normalized})
+            ),
+            wait=True,
+        )
+
     def list_ids(self, workspace_id: str | None = None) -> list[str]:
         """列出 collection 中的 point id，可按 workspace 收窄。
 
         只用于重建后的孤儿清理；M1 规模下一次性收集 id 足够，后续可分页化。
+        空字符串不等同于“全部”，会直接抛错，避免误删所有 workspace 数据。
         """
+        if workspace_id is not None:
+            workspace_id = self._require_workspace(workspace_id)
         if not self.exists():
             return []
         scroll_filter = self._build_filter(

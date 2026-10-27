@@ -10,6 +10,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.models import Memory
+from app.models.base import utcnow
 from app.repositories.memory import MemoryFilters, MemoryRepository
 from app.repositories.outbox import OutboxRepository
 
@@ -90,6 +91,25 @@ def test_outbox_claim_reclaims_stale_processing(db_session: Session) -> None:
     reclaimed = repo.claim_batch(limit=10)
     assert [item.id for item in reclaimed] == [event.id]
     assert reclaimed[0].attempts == 2
+
+
+def test_dead_letter_requires_expired_lease(db_session: Session) -> None:
+    repo = OutboxRepository(db_session)
+    event = repo.add("memory.upserted", "m-1", {"memory_id": "m-1"})
+    event.attempts = 8
+    event.status = "processing"
+    event.next_attempt_at = utcnow() + timedelta(minutes=5)
+    db_session.flush()
+
+    # 最后一次尝试仍在执行/租约未过期时不能被提前杀掉。
+    assert repo.dead_letter_exhausted(max_attempts=8) == 0
+    assert event.status == "processing"
+
+    event.next_attempt_at = utcnow() - timedelta(seconds=1)
+    db_session.flush()
+    assert repo.dead_letter_exhausted(max_attempts=8) == 1
+    assert event.status == "dead"
+    assert "last_error" in event.payload
 
 
 def test_filters_narrow_listing(db_session: Session) -> None:

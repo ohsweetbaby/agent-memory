@@ -4,8 +4,9 @@
 
 - 写入路径只负责落 Postgres + outbox；这里的所有外部调用都可以失败重试，
   Postgres 始终是事实源。
-- ``dispatch_outbox`` 用租约领取事件（``processing`` + 过期时间），投递成功
-  后置 ``done``；失败或 worker 崩溃时事件会在租约到期后重新投递。
+- ``dispatch_outbox`` 用租约领取事件（``processing`` + 过期时间），投递后
+  保持 ``processing``；只有 ``project_memory`` 完成全部投影后才置 ``done``。
+  失败或 worker 崩溃时事件会在租约到期后重新投递。
 - 投影按 ``projection_state(memory_id, target, version)`` 幂等；同一版本重复
   事件直接跳过，旧版本不会覆盖新版本。
 """
@@ -19,7 +20,7 @@ from datetime import timedelta
 from typing import Any, NoReturn
 
 from celery.exceptions import Retry
-from sqlalchemy import select, update
+from sqlalchemy import and_, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -50,6 +51,7 @@ TASK_EMBED_MEMORY = "app.jobs.tasks.embed_memory"
 TASK_PROJECT_MEMORY = "app.jobs.tasks.project_memory"
 TASK_PROJECT_QDRANT = "app.jobs.tasks.project_qdrant"
 TASK_PROJECT_NEO4J = "app.jobs.tasks.project_neo4j"
+TASK_HEAL_PROJECTION_IDENTITY = "app.jobs.tasks.heal_projection_identity"
 
 NEO4J_TARGET = "neo4j"
 
@@ -296,9 +298,13 @@ def project_neo4j_record(
 
 
 def _record_projection_error(
-    memory_id: str, target: str, version: int, exc: Exception
+    memory_id: str, target: str, exc: Exception
 ) -> None:
-    """投影失败时单独提交错误，避免随事务回滚而丢失。"""
+    """投影失败时单独提交错误，避免随事务回滚而丢失。
+
+    新建行固定写 ``version=0``：错误行只用于诊断，不能冒充已投影版本；
+    已有状态行则只更新 ``error``，保留其版本。
+    """
     runtime = get_runtime()
     message = (str(exc) or exc.__class__.__name__)[:2000]
     try:
@@ -415,17 +421,16 @@ def _run_neo4j_step(runtime: Runtime, memory_id: str, version: int | None) -> No
 
 def _project_one(runtime: Runtime, memory_id: str, version: int | None) -> None:
     """依次投影 Qdrant / Neo4j；任一步失败都会留下可查询的 error。"""
-    error_version = int(version or 0)
     qtarget = qdrant_target(runtime.qdrant)
     try:
         _run_qdrant_step(runtime, memory_id, version)
     except Exception as exc:
-        _record_projection_error(memory_id, qtarget, error_version, exc)
+        _record_projection_error(memory_id, qtarget, exc)
         raise
     try:
         _run_neo4j_step(runtime, memory_id, version)
     except Exception as exc:
-        _record_projection_error(memory_id, NEO4J_TARGET, error_version, exc)
+        _record_projection_error(memory_id, NEO4J_TARGET, exc)
         raise
 
 
@@ -477,7 +482,7 @@ def _dispatch(limit: int) -> int:
 
 @celery_app.task(bind=True, name=TASK_PROJECT_MEMORY, **_TASK_OPTIONS)
 def project_memory(
-    self: Any, event_id: str, memory_id: str, version: int | None = None
+    self: Any, event_id: str | None, memory_id: str, version: int | None = None
 ) -> bool:
     """投影一条记忆的完整链路；成功后才把 outbox 事件置为 done。"""
     runtime = get_runtime()
@@ -501,6 +506,59 @@ def dispatch_outbox(self: Any, limit: int = 50) -> int:
     """领取 pending/stale 事件并投递投影任务。"""
     try:
         return _dispatch(limit)
+    except Retry:
+        raise
+    except Exception as exc:
+        _retry_or_reraise(self, exc)
+
+
+def _projection_identity_gaps(
+    db: Session, target: str, limit: int
+) -> list[tuple[str, int]]:
+    """找出当前 collection 缺少最新投影状态的 active 记忆。"""
+    statement = (
+        select(Memory.id, Memory.version)
+        .outerjoin(
+            ProjectionState,
+            and_(
+                ProjectionState.memory_id == Memory.id,
+                ProjectionState.target == target,
+            ),
+        )
+        .where(
+            Memory.status == "active",
+            Memory.deleted_at.is_(None),
+            or_(
+                ProjectionState.id.is_(None),
+                ProjectionState.version < Memory.version,
+            ),
+        )
+        .order_by(Memory.id)
+        .limit(limit)
+    )
+    return [(row[0], int(row[1])) for row in db.execute(statement).all()]
+
+
+@celery_app.task(bind=True, name=TASK_HEAL_PROJECTION_IDENTITY, **_TASK_OPTIONS)
+def heal_projection_identity(self: Any, limit: int = 500) -> int:
+    """配置切换自愈：为当前 collection 缺失投影状态的记忆补投任务。
+
+    beat 每 10 分钟调用一次。只处理 active、未删除且状态版本落后于记忆版本
+    的条目；重试失败的记录版本为 0，下一轮会再次被拾取。
+    """
+    try:
+        runtime = get_runtime()
+        target = qdrant_target(runtime.qdrant)
+        with runtime.session_scope() as db:
+            rows = _projection_identity_gaps(db, target, limit)
+        if rows:
+            logger.warning(
+                "projection identity drift detected",
+                extra={"target": target, "count": len(rows)},
+            )
+        for memory_id, version in rows:
+            enqueue(TASK_PROJECT_MEMORY, None, memory_id, version)
+        return len(rows)
     except Retry:
         raise
     except Exception as exc:
@@ -551,7 +609,6 @@ def project_qdrant(
         _record_projection_error(
             memory_id,
             qdrant_target(runtime.qdrant),
-            int(version or 0),
             exc,
         )
         _retry_or_reraise(self, exc)
@@ -576,9 +633,7 @@ def project_neo4j(
     except Retry:
         raise
     except Exception as exc:
-        _record_projection_error(
-            memory_id, NEO4J_TARGET, int(version or 0), exc
-        )
+        _record_projection_error(memory_id, NEO4J_TARGET, exc)
         _retry_or_reraise(self, exc)
 
 
@@ -586,6 +641,7 @@ __all__ = [
     "dispatch_outbox",
     "embed_memory",
     "enqueue",
+    "heal_projection_identity",
     "mark_projected",
     "project_memory",
     "project_neo4j",

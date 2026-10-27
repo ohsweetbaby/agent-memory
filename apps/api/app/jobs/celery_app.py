@@ -31,6 +31,10 @@ celery_app.conf.update(
             "task": "app.jobs.tasks.dispatch_outbox",
             "schedule": 5.0,
         },
+        "heal-projection-identity": {
+            "task": "app.jobs.tasks.heal_projection_identity",
+            "schedule": 600.0,
+        },
     },
 )
 

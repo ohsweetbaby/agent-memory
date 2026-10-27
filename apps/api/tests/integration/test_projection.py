@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import logging
 from contextlib import nullcontext
 from datetime import timedelta
 from typing import Any
@@ -21,6 +22,7 @@ from app.adapters.qdrant import QdrantIndex
 from app.jobs.runtime import Runtime, configure_runtime, reset_runtime
 from app.jobs.tasks import (
     dispatch_outbox,
+    heal_projection_identity,
     project_memory,
     project_qdrant,
     qdrant_target,
@@ -183,7 +185,7 @@ def test_rebuild_recreates_missing_points(
     memory: Memory,
 ) -> None:
     qdrant_index.delete(memory.id)
-    run_rebuild("qdrant")
+    run_rebuild("qdrant", all_workspaces=True)
     assert qdrant_index.count("ws1") == 1
 
 
@@ -222,6 +224,30 @@ def test_rebuild_is_workspace_scoped(
         )
     }
     assert states == {memory.id, other.id}
+
+
+def test_qdrant_delete_by_workspace_only_targets_one_workspace(
+    qdrant_index: QdrantIndex,
+    db_session: Session,
+    memory: Memory,
+) -> None:
+    other = Memory(
+        workspace_id="ws2",
+        scope="user",
+        scope_id="u2",
+        type="semantic",
+        content="另一个工作区的内容",
+        last_reinforced_at=utcnow(),
+        valid_from=utcnow(),
+    )
+    db_session.add(other)
+    db_session.flush()
+    assert project_qdrant.run(memory.id, memory.version) is True
+    assert project_qdrant.run(other.id, other.version) is True
+
+    qdrant_index.delete_by_workspace("ws1")
+    assert qdrant_index.get(memory.id) is None
+    assert qdrant_index.get(other.id) is not None
 
 
 def test_outbox_dispatch_projects_memory(
@@ -364,6 +390,7 @@ def test_outbox_dispatch_dead_letters_exhausted_events(
         {"memory_id": memory.id, "version": memory.version, "workspace_id": "ws1"},
     )
     event.attempts = 8
+    event.status = "processing"
     event.next_attempt_at = utcnow() - timedelta(seconds=1)
     db_session.flush()
 
@@ -444,6 +471,54 @@ def test_projection_backfills_new_collection(
             "qdrant:mem_fake_fake-8_8",
             qdrant_target(alt_index),
         }
+    finally:
+        alt_index.delete_collection()
+        alt_index.close()
+
+
+def test_heal_projection_identity_backfills_new_collection(
+    db_session: Session,
+    memory: Memory,
+    qdrant_url: str,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    assert project_qdrant.run(memory.id, memory.version) is True
+    old_target = "qdrant:mem_fake_fake-8_8"
+    alt_index = QdrantIndex(
+        qdrant_url, provider="fake", model="fake-alt-8", dim=8
+    )
+    try:
+        configure_runtime(
+            Runtime(
+                session_scope=lambda: nullcontext(db_session),
+                embedding=FakeEmbedding(dim=8, model="fake-alt-8"),
+                qdrant=alt_index,
+                neo4j=RecordingGraphIndex(),
+                eager=True,
+            )
+        )
+        with caplog.at_level(logging.WARNING, logger="app.jobs.tasks"):
+            healed = heal_projection_identity.run(limit=10)
+            assert healed == 1
+            run_worker_once()
+
+        assert alt_index.count("ws1") == 1
+        state = db_session.scalars(
+            select(ProjectionState).where(
+                ProjectionState.memory_id == memory.id,
+                ProjectionState.target == qdrant_target(alt_index),
+            )
+        ).one()
+        assert state.version == memory.version
+        # 旧 target 的状态保留，用于回滚/审计。
+        old_state = db_session.scalars(
+            select(ProjectionState).where(
+                ProjectionState.memory_id == memory.id,
+                ProjectionState.target == old_target,
+            )
+        ).one()
+        assert old_state.version == memory.version
+        assert "projection identity drift" in caplog.text
     finally:
         alt_index.delete_collection()
         alt_index.close()
