@@ -13,12 +13,14 @@ import os
 # 因此关闭 Ryuk 只影响进程崩溃时的兜底清理。
 os.environ.setdefault("TESTCONTAINERS_RYUK_DISABLED", "true")
 
+import time  # noqa: E402
 from collections.abc import Callable, Iterator  # noqa: E402
 from pathlib import Path  # noqa: E402
 from types import SimpleNamespace  # noqa: E402
 from typing import Any  # noqa: E402
 from uuid import uuid4  # noqa: E402
 
+import httpx  # noqa: E402
 import pytest  # noqa: E402
 import redis  # noqa: E402
 from alembic import command  # noqa: E402
@@ -28,8 +30,11 @@ from sqlalchemy import create_engine, select, text  # noqa: E402
 from sqlalchemy.engine import Engine, make_url  # noqa: E402
 from sqlalchemy.orm import Session, sessionmaker  # noqa: E402
 from testcontainers.community.redis import RedisContainer  # noqa: E402
+from testcontainers.core.container import DockerContainer  # noqa: E402
 from testcontainers.postgres import PostgresContainer  # noqa: E402
 
+from app.adapters.neo4j import Neo4jIndex  # noqa: E402
+from app.adapters.qdrant import QdrantIndex  # noqa: E402
 from app.config import Settings  # noqa: E402
 from app.db import build_session_factory, get_db  # noqa: E402
 from app.main import create_app  # noqa: E402
@@ -42,6 +47,9 @@ ALEMBIC_SCRIPT = API_ROOT / "alembic"
 # 使用本地已有 tag，避免 CI/离线环境访问 Docker Hub 失败。
 POSTGRES_IMAGE = "postgres:16-alpine"
 REDIS_IMAGE = "redis:7-alpine"
+QDRANT_IMAGE = "qdrant/qdrant:v1.12.4"
+NEO4J_IMAGE = "neo4j:5-community"
+NEO4J_PASSWORD = "test-password"
 
 # 集成测试专用密钥；crypto/会话签名都从当前应用配置读取。
 TEST_SECRET_KEY = "integration-test-secret-key"
@@ -67,6 +75,83 @@ def redis_url(redis_container: RedisContainer) -> str:
     host = redis_container.get_container_host_ip()
     port = redis_container.get_exposed_port(6379)
     return f"redis://{host}:{port}/0"
+
+
+def _published_url(container: DockerContainer, port: int) -> str:
+    """testcontainers 在部分驱动的 host 是 ``localhost``；URL 统一走这里。"""
+    host = container.get_container_host_ip()
+    published = container.get_exposed_port(port)
+    return f"{host}:{published}"
+
+
+def _wait_for_http(url: str, path: str = "/readyz", timeout: float = 90.0) -> None:
+    """轮询容器 HTTP 就绪端点；端口开放不代表服务已可用。"""
+    deadline = time.monotonic() + timeout
+    last_error: Exception | None = None
+    while time.monotonic() < deadline:
+        try:
+            response = httpx.get(f"{url}{path}", timeout=2.0)
+            if response.status_code < 500:
+                return
+        except Exception as exc:  # 容器刚启动时连接会被拒绝
+            last_error = exc
+        time.sleep(0.5)
+    raise RuntimeError(f"服务未在 {timeout:.0f}s 内就绪: {url}{path}") from last_error
+
+
+@pytest.fixture(scope="session")
+def qdrant_container() -> Iterator[DockerContainer]:
+    """Qdrant 集成测试共享一个容器；按测试使用独立 collection。"""
+    with DockerContainer(QDRANT_IMAGE).with_exposed_ports(6333) as container:
+        _wait_for_http(f"http://{_published_url(container, 6333)}", "/readyz")
+        yield container
+
+
+@pytest.fixture(scope="session")
+def qdrant_url(qdrant_container: DockerContainer) -> str:
+    return f"http://{_published_url(qdrant_container, 6333)}"
+
+
+@pytest.fixture()
+def qdrant_index(qdrant_url: str) -> Iterator[QdrantIndex]:
+    """指向测试容器的 FakeEmbedding 维度 collection，测试后清理。"""
+    index = QdrantIndex(qdrant_url, provider="fake", model="fake-8", dim=8)
+    index.recreate_collection()
+    try:
+        yield index
+    finally:
+        index.delete_collection()
+        index.close()
+
+
+@pytest.fixture(scope="session")
+def neo4j_container() -> Iterator[DockerContainer]:
+    """Neo4j Community 启动较慢，会话级共享；就绪由驱动轮询。"""
+    container = (
+        DockerContainer(NEO4J_IMAGE)
+        .with_env("NEO4J_AUTH", f"neo4j/{NEO4J_PASSWORD}")
+        .with_exposed_ports(7687)
+    )
+    with container:
+        yield container
+
+
+@pytest.fixture()
+def neo4j_index(neo4j_container: DockerContainer) -> Iterator[Neo4jIndex]:
+    """指向测试容器的图索引；每个测试前清空 M1 节点，避免残留。"""
+    index = Neo4jIndex(
+        f"bolt://{_published_url(neo4j_container, 7687)}",
+        "neo4j",
+        NEO4J_PASSWORD,
+    )
+    try:
+        index.wait_ready(timeout=180.0)
+        index.clear()
+        yield index
+    finally:
+        index.clear()
+        index.close()
+
 
 
 @pytest.fixture(autouse=True)

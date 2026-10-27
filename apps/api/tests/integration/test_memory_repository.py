@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import Any
 
 import pytest
@@ -74,6 +75,21 @@ def test_outbox_claim_batch_marks_events_processing(db_session: Session) -> None
     assert claimed[0].status == "processing"
     assert claimed[0].attempts == 1
     assert repo.claim_batch(limit=10) == []
+
+
+def test_outbox_claim_reclaims_stale_processing(db_session: Session) -> None:
+    repo = OutboxRepository(db_session)
+    event = repo.add("memory.upserted", "m-1", {"memory_id": "m-1"})
+    first = repo.claim_batch(limit=10)
+    assert [item.id for item in first] == [event.id]
+    # 租约未过期：其他 worker 不能重复领取。
+    assert repo.claim_batch(limit=10) == []
+
+    event.next_attempt_at = event.next_attempt_at - timedelta(minutes=10)
+    db_session.flush()
+    reclaimed = repo.claim_batch(limit=10)
+    assert [item.id for item in reclaimed] == [event.id]
+    assert reclaimed[0].attempts == 2
 
 
 def test_filters_narrow_listing(db_session: Session) -> None:

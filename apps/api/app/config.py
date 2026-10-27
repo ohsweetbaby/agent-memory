@@ -52,7 +52,10 @@ class Settings(BaseSettings):
     embedding_provider: str = "openai"
     embedding_model: str = "text-embedding-3-small"
     embedding_dim: int = 1536
+    # 嵌入服务可与对话服务不同；留空复用 LLM 的 base_url。
+    embedding_base_url: str = ""
     llm_base_url: str = "https://api.openai.com/v1"
+    llm_model: str = "gpt-4o-mini"
     llm_api_key: str = Field(default="", repr=False)
 
     @property

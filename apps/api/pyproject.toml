@@ -18,7 +18,13 @@ dependencies = [
     "itsdangerous>=2.2,<3",
     "cryptography>=43,<47",
     "redis>=5,<7",
+    "qdrant-client>=1.12,<1.13",
+    "neo4j>=5.26,<6",
 ]
+
+[project.optional-dependencies]
+# 本地嵌入是可选项：未安装时模块仍可导入，只有真正调用本地 provider 才报错。
+local-embeddings = ["sentence-transformers>=3.3,<6"]
 
 [build-system]
 requires = ["hatchling"]
