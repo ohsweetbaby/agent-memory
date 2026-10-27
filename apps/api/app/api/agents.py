@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import (
     DEFAULT_PAGE_SIZE,
+    audit_actor,
     ensure_workspace,
     paginate,
     resolve_workspace_id,
@@ -22,6 +23,7 @@ from app.db import get_db
 from app.errors import ConflictError, NotFoundError
 from app.models import Agent, EndUser
 from app.models.base import utcnow
+from app.services.audit import write_audit
 
 router = APIRouter(prefix="/api/v1", tags=["agents"])
 
@@ -40,6 +42,11 @@ class AgentPatch(BaseModel):
 class EndUserCreate(BaseModel):
     workspace_id: str | None = Field(default=None, max_length=36)
     external_id: str = Field(min_length=1, max_length=255)
+    display_name: str | None = Field(default=None, max_length=255)
+
+
+class EndUserPatch(BaseModel):
+    external_id: str | None = Field(default=None, min_length=1, max_length=255)
     display_name: str | None = Field(default=None, max_length=255)
 
 
@@ -63,6 +70,14 @@ def _end_user_payload(end_user: EndUser) -> dict[str, Any]:
         "created_at": end_user.created_at,
         "deleted_at": end_user.deleted_at,
     }
+
+
+def _agent_snapshot(agent: Agent) -> dict[str, Any]:
+    return {"name": agent.name, "description": agent.description}
+
+
+def _end_user_snapshot(end_user: EndUser) -> dict[str, Any]:
+    return {"external_id": end_user.external_id, "display_name": end_user.display_name}
 
 
 def _load_agent(session: Session, context: AuthContext, agent_id: str) -> Agent:
@@ -129,6 +144,18 @@ def create_agent(
         workspace_id=resolved, name=payload.name, description=payload.description
     )
     session.add(agent)
+    session.flush()
+    actor_type, actor_id = audit_actor(context)
+    write_audit(
+        session,
+        action="agent.created",
+        target_type="agent",
+        target_id=agent.id,
+        workspace_id=resolved,
+        actor_type=actor_type,
+        actor_id=actor_id,
+        after=_agent_snapshot(agent),
+    )
     try:
         session.commit()
     except IntegrityError as exc:  # 并发创建同名 Agent
@@ -154,6 +181,7 @@ def patch_agent(
     session: Session = Depends(get_db),
 ) -> dict[str, Any]:
     agent = _load_agent(session, context, agent_id)
+    before = _agent_snapshot(agent)
     if payload.name is not None and payload.name != agent.name:
         duplicate = session.scalar(
             select(Agent.id).where(
@@ -168,6 +196,18 @@ def patch_agent(
         agent.name = payload.name
     if "description" in payload.model_fields_set:
         agent.description = payload.description
+    actor_type, actor_id = audit_actor(context)
+    write_audit(
+        session,
+        action="agent.updated",
+        target_type="agent",
+        target_id=agent.id,
+        workspace_id=agent.workspace_id,
+        actor_type=actor_type,
+        actor_id=actor_id,
+        before=before,
+        after=_agent_snapshot(agent),
+    )
     try:
         session.commit()
     except IntegrityError as exc:
@@ -183,7 +223,20 @@ def delete_agent(
     session: Session = Depends(get_db),
 ) -> Response:
     agent = _load_agent(session, context, agent_id)
+    before = _agent_snapshot(agent)
     agent.deleted_at = utcnow()
+    actor_type, actor_id = audit_actor(context)
+    write_audit(
+        session,
+        action="agent.deleted",
+        target_type="agent",
+        target_id=agent.id,
+        workspace_id=agent.workspace_id,
+        actor_type=actor_type,
+        actor_id=actor_id,
+        before=before,
+        after={"deleted_at": agent.deleted_at.isoformat()},
+    )
     session.commit()
     return Response(status_code=204)
 
@@ -238,6 +291,61 @@ def create_end_user(
         display_name=payload.display_name,
     )
     session.add(end_user)
+    session.flush()
+    actor_type, actor_id = audit_actor(context)
+    write_audit(
+        session,
+        action="end_user.created",
+        target_type="end_user",
+        target_id=end_user.id,
+        workspace_id=resolved,
+        actor_type=actor_type,
+        actor_id=actor_id,
+        after=_end_user_snapshot(end_user),
+    )
+    try:
+        session.commit()
+    except IntegrityError as exc:
+        session.rollback()
+        raise ConflictError("external_id 已存在") from exc
+    return _end_user_payload(end_user)
+
+
+@router.patch("/end-users/{end_user_id}")
+def patch_end_user(
+    end_user_id: str,
+    payload: EndUserPatch,
+    context: AuthContext = Depends(require_scope("write")),
+    session: Session = Depends(get_db),
+) -> dict[str, Any]:
+    end_user = _load_end_user(session, context, end_user_id)
+    before = _end_user_snapshot(end_user)
+    if payload.external_id is not None and payload.external_id != end_user.external_id:
+        duplicate = session.scalar(
+            select(EndUser.id).where(
+                EndUser.workspace_id == end_user.workspace_id,
+                EndUser.external_id == payload.external_id,
+                EndUser.deleted_at.is_(None),
+                EndUser.id != end_user.id,
+            )
+        )
+        if duplicate is not None:
+            raise ConflictError("external_id 已存在")
+        end_user.external_id = payload.external_id
+    if "display_name" in payload.model_fields_set:
+        end_user.display_name = payload.display_name
+    actor_type, actor_id = audit_actor(context)
+    write_audit(
+        session,
+        action="end_user.updated",
+        target_type="end_user",
+        target_id=end_user.id,
+        workspace_id=end_user.workspace_id,
+        actor_type=actor_type,
+        actor_id=actor_id,
+        before=before,
+        after=_end_user_snapshot(end_user),
+    )
     try:
         session.commit()
     except IntegrityError as exc:
@@ -253,6 +361,19 @@ def delete_end_user(
     session: Session = Depends(get_db),
 ) -> Response:
     end_user = _load_end_user(session, context, end_user_id)
+    before = _end_user_snapshot(end_user)
     end_user.deleted_at = utcnow()
+    actor_type, actor_id = audit_actor(context)
+    write_audit(
+        session,
+        action="end_user.deleted",
+        target_type="end_user",
+        target_id=end_user.id,
+        workspace_id=end_user.workspace_id,
+        actor_type=actor_type,
+        actor_id=actor_id,
+        before=before,
+        after={"deleted_at": end_user.deleted_at.isoformat()},
+    )
     session.commit()
     return Response(status_code=204)

@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import (
     DEFAULT_PAGE_SIZE,
+    audit_actor,
     ensure_workspace,
     paginate,
     resolve_workspace_id,
@@ -23,6 +24,7 @@ from app.db import get_db
 from app.errors import ApiError, ConflictError, NotFoundError
 from app.models import ApiKey
 from app.models.base import utcnow
+from app.services.audit import write_audit
 
 router = APIRouter(prefix="/api/v1/keys", tags=["keys"])
 
@@ -94,6 +96,21 @@ def create_key(
         normalized,
         rate_limit=payload.rate_limit,
     )
+    actor_type, actor_id = audit_actor(context)
+    write_audit(
+        session,
+        action="key.created",
+        target_type="api_key",
+        target_id=key.id,
+        workspace_id=workspace_id,
+        actor_type=actor_type,
+        actor_id=actor_id,
+        after={
+            "name": key.name,
+            "prefix": key.prefix,
+            "scopes": list(key.scopes),
+        },
+    )
     try:
         session.commit()
     except IntegrityError as exc:  # 前缀碰撞概率极低，重试由调用方决定
@@ -116,6 +133,18 @@ def revoke_key(
     if key.revoked_at is not None:
         raise NotFoundError("API Key 不存在")
     key.revoked_at = utcnow()
+    actor_type, actor_id = audit_actor(context)
+    write_audit(
+        session,
+        action="key.revoked",
+        target_type="api_key",
+        target_id=key.id,
+        workspace_id=key.workspace_id,
+        actor_type=actor_type,
+        actor_id=actor_id,
+        before={"revoked_at": None},
+        after={"revoked_at": key.revoked_at.isoformat()},
+    )
     session.commit()
     return Response(status_code=204)
 

@@ -9,10 +9,11 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.deps import DEFAULT_PAGE_SIZE, ensure_workspace, paginate
+from app.api.deps import DEFAULT_PAGE_SIZE, audit_actor, ensure_workspace, paginate
 from app.auth.session import AuthContext, require_scope
 from app.db import get_db
 from app.models import Workspace
+from app.services.audit import write_audit
 
 router = APIRouter(prefix="/api/v1/workspaces", tags=["workspaces"])
 
@@ -58,6 +59,18 @@ def create_workspace(
 ) -> dict[str, Any]:
     workspace = Workspace(name=payload.name)
     session.add(workspace)
+    session.flush()
+    actor_type, actor_id = audit_actor(context)
+    write_audit(
+        session,
+        action="workspace.created",
+        target_type="workspace",
+        target_id=workspace.id,
+        workspace_id=workspace.id,
+        actor_type=actor_type,
+        actor_id=actor_id,
+        after={"name": workspace.name},
+    )
     session.commit()
     return _workspace_payload(workspace)
 
@@ -79,6 +92,19 @@ def patch_workspace(
     session: Session = Depends(get_db),
 ) -> dict[str, Any]:
     workspace = ensure_workspace(session, context, workspace_id)
+    previous_name = workspace.name
     workspace.name = payload.name
+    actor_type, actor_id = audit_actor(context)
+    write_audit(
+        session,
+        action="workspace.updated",
+        target_type="workspace",
+        target_id=workspace.id,
+        workspace_id=workspace.id,
+        actor_type=actor_type,
+        actor_id=actor_id,
+        before={"name": previous_name},
+        after={"name": workspace.name},
+    )
     session.commit()
     return _workspace_payload(workspace)

@@ -6,14 +6,16 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Request, Response
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.auth.password import hash_password, needs_rehash, verify_password
 from app.auth.ratelimit import (
+    acquire_login_attempt,
     login_lock_seconds,
     record_login_failure,
+    release_login_attempt,
     reset_login_failures,
 )
 from app.auth.session import (
@@ -27,10 +29,15 @@ from app.db import get_db
 from app.errors import ConflictError, RateLimitError, UnauthorizedError
 from app.models import AdminUser
 from app.models.base import utcnow
+from app.services.audit import write_audit
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
 ADMIN_USERNAME = "admin"
+
+# 固定 advisory lock：serialize 首次 setup，保证进程/多实例并发下只创建一个管理员。
+SETUP_ADVISORY_LOCK_ID = 0x616D7365747570
+LOGIN_ATTEMPT_RETRY_AFTER = 5
 
 # 用户名不存在时也做一次 Argon2 校验，避免通过响应时间探测账号存在性。
 _DUMMY_HASH = hash_password("not-a-real-password")
@@ -62,20 +69,54 @@ def _client_ip(request: Request) -> str:
 
 @router.post("/setup", status_code=201)
 def setup(payload: SetupRequest, session: Session = Depends(get_db)) -> dict[str, Any]:
-    """首次启动创建唯一管理员；重复调用返回 409。"""
+    """首次启动创建唯一管理员；重复调用返回 409。
+
+    先在事务级 advisory lock 内重新计数，避免两个并发 setup（不同用户名）
+    各自通过 ``count(*)`` 检查后都插入成功。
+    """
+    session.execute(
+        text("SELECT pg_advisory_xact_lock(:key)"), {"key": SETUP_ADVISORY_LOCK_ID}
+    )
     existing = session.scalar(select(func.count()).select_from(AdminUser))
     if existing:
         raise ConflictError("管理员已存在，请直接登录")
+
     admin = AdminUser(
         username=payload.username, password_hash=hash_password(payload.password)
     )
     session.add(admin)
+    session.flush()
+    write_audit(
+        session,
+        action="auth.setup",
+        target_type="admin_user",
+        target_id=admin.id,
+        actor_type="system",
+        after={"username": admin.username},
+    )
     try:
         session.commit()
-    except IntegrityError as exc:  # 并发 setup 时唯一约束兜底
+    except IntegrityError as exc:  # 理论上不可达：advisory lock 已串行化
         session.rollback()
         raise ConflictError("管理员已存在，请直接登录") from exc
     return {"admin": _admin_payload(admin)}
+
+
+def _audit_login(
+    session: Session,
+    action: str,
+    *,
+    username: str,
+    admin_id: str | None,
+) -> None:
+    write_audit(
+        session,
+        action=action,
+        target_type="admin_user",
+        target_id=admin_id or username or "unknown",
+        actor_type="admin" if admin_id is not None else "anonymous",
+        actor_id=admin_id,
+    )
 
 
 @router.post("/login")
@@ -86,30 +127,64 @@ def login(
     session: Session = Depends(get_db),
 ) -> dict[str, Any]:
     ip = _client_ip(request)
-    locked_for = login_lock_seconds(ip)
-    if locked_for:
-        raise RateLimitError("登录失败次数过多，请稍后再试", retry_after=locked_for)
+    attempt = acquire_login_attempt(ip)
+    if attempt is None:
+        # 同一 IP 已有登录校验在途：直接拒绝，避免并发绕过失败计数。
+        raise RateLimitError(
+            "登录请求过于频繁，请稍后再试", retry_after=LOGIN_ATTEMPT_RETRY_AFTER
+        )
+    try:
+        locked_for = login_lock_seconds(ip)
+        if locked_for:
+            raise RateLimitError("登录失败次数过多，请稍后再试", retry_after=locked_for)
 
-    admin = session.scalar(select(AdminUser).where(AdminUser.username == payload.username))
-    if admin is None:
-        verify_password(payload.password, _DUMMY_HASH)
-        record_login_failure(ip)
-        raise UnauthorizedError("用户名或密码错误")
-    if not verify_password(payload.password, admin.password_hash):
-        record_login_failure(ip)
-        raise UnauthorizedError("用户名或密码错误")
+        admin = session.scalar(
+            select(AdminUser).where(AdminUser.username == payload.username)
+        )
+        if admin is None:
+            # 仍做一次 Argon2 校验，避免通过响应时间探测账号存在性。
+            verify_password(payload.password, _DUMMY_HASH)
+            record_login_failure(ip)
+            _audit_login(
+                session, "auth.login_failed", username=payload.username, admin_id=None
+            )
+            session.commit()
+            raise UnauthorizedError("用户名或密码错误")
+        if not verify_password(payload.password, admin.password_hash):
+            record_login_failure(ip)
+            _audit_login(
+                session, "auth.login_failed", username=payload.username, admin_id=None
+            )
+            session.commit()
+            raise UnauthorizedError("用户名或密码错误")
 
-    reset_login_failures(ip)
-    if needs_rehash(admin.password_hash):
-        admin.password_hash = hash_password(payload.password)
-    admin.last_login_at = utcnow()
-    csrf_token = create_session(response, admin.id)
-    session.commit()
-    return {"csrf_token": csrf_token, "admin": _admin_payload(admin)}
+        reset_login_failures(ip)
+        if needs_rehash(admin.password_hash):
+            admin.password_hash = hash_password(payload.password)
+        admin.last_login_at = utcnow()
+        _audit_login(session, "auth.login", username=admin.username, admin_id=admin.id)
+        csrf_token = create_session(response, admin.id)
+        session.commit()
+        return {"csrf_token": csrf_token, "admin": _admin_payload(admin)}
+    finally:
+        release_login_attempt(ip, attempt)
 
 
 @router.post("/logout", status_code=204)
-def logout(response: Response, admin: AdminUser = Depends(require_admin)) -> Response:
+def logout(
+    response: Response,
+    admin: AdminUser = Depends(require_admin),
+    session: Session = Depends(get_db),
+) -> Response:
+    write_audit(
+        session,
+        action="auth.logout",
+        target_type="admin_user",
+        target_id=admin.id,
+        actor_type="admin",
+        actor_id=admin.id,
+    )
+    session.commit()
     clear_session(response)
     response.status_code = 204
     return response

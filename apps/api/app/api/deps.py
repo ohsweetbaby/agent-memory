@@ -51,6 +51,13 @@ def ensure_workspace(session: Session, context: AuthContext, workspace_id: str) 
     return workspace
 
 
+def audit_actor(context: AuthContext) -> tuple[str, str | None]:
+    """审计主体：管理台会话为 admin，API Key 为 api_key。"""
+    if context.api_key is not None:
+        return "api_key", context.api_key.id
+    return "admin", context.admin.id if context.admin is not None else None
+
+
 def encode_cursor(created_at: datetime, row_id: str) -> str:
     raw = f"{created_at.isoformat()}|{row_id}".encode("utf-8")
     return base64.urlsafe_b64encode(raw).decode("ascii")
