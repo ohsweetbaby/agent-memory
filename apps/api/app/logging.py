@@ -13,6 +13,12 @@ from typing import Any
 
 _HANDLER_MARKER = "_agent_memory_json_handler"
 
+# uvicorn 默认给这些日志器装 plaintext handler 且关闭传播，必须统一改走 root JSON。
+_UVICORN_LOGGERS = ("uvicorn", "uvicorn.error", "uvicorn.access")
+
+# HTTP 客户端每次请求都打 INFO，参数可能含敏感内容，只保留告警。
+_QUIET_LOGGERS = ("httpx", "httpcore")
+
 # LogRecord 自带的字段不重复输出，其余通过 extra 传入的字段原样保留。
 _RESERVED_FIELDS = set(
     vars(logging.LogRecord("", logging.INFO, "", 0, "", (), None))
@@ -52,7 +58,11 @@ class JsonFormatter(logging.Formatter):
 
 
 def configure_logging(level: str = "INFO") -> None:
-    """安装 JSON 日志处理器；重复调用不会叠加 handler。"""
+    """安装 JSON 日志处理器；重复调用不会叠加 handler。
+
+    uvicorn 自带的 plaintext handler 会被移除并改为向 root 传播，
+    确保启动、访问与异常日志同样是一行一个 JSON。
+    """
     root = logging.getLogger()
     for handler in list(root.handlers):
         if getattr(handler, _HANDLER_MARKER, False):
@@ -63,3 +73,12 @@ def configure_logging(level: str = "INFO") -> None:
     handler.setFormatter(JsonFormatter())
     root.addHandler(handler)
     root.setLevel(level.upper())
+
+    for name in _UVICORN_LOGGERS:
+        uvicorn_logger = logging.getLogger(name)
+        for uvicorn_handler in list(uvicorn_logger.handlers):
+            uvicorn_logger.removeHandler(uvicorn_handler)
+        uvicorn_logger.propagate = True
+
+    for name in _QUIET_LOGGERS:
+        logging.getLogger(name).setLevel(logging.WARNING)
