@@ -1,0 +1,12 @@
+.worktrees/
+.superpowers/
+backups/
+artifacts/
+.env
+.venv/
+node_modules/
+__pycache__/
+*.pyc
+.pytest_cache/
+.playwright/
+dist/
