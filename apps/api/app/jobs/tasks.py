@@ -15,10 +15,11 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections import deque
+from datetime import timedelta
 from typing import Any, NoReturn
 
 from celery.exceptions import Retry
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -30,6 +31,7 @@ from app.models import (
     Memory,
     MemoryEntity,
     MemoryLink,
+    OutboxEvent,
     ProjectionState,
 )
 from app.models.base import utcnow
@@ -40,11 +42,16 @@ logger = logging.getLogger(__name__)
 
 MAX_ATTEMPTS = 8
 LEASE_SECONDS = 300
+#: 投影任务执行期间续租；Celery 8 次指数退避总时长小于该值。
+PROJECTION_LEASE_SECONDS = 1800
 
 TASK_DISPATCH_OUTBOX = "app.jobs.tasks.dispatch_outbox"
 TASK_EMBED_MEMORY = "app.jobs.tasks.embed_memory"
+TASK_PROJECT_MEMORY = "app.jobs.tasks.project_memory"
 TASK_PROJECT_QDRANT = "app.jobs.tasks.project_qdrant"
 TASK_PROJECT_NEO4J = "app.jobs.tasks.project_neo4j"
+
+NEO4J_TARGET = "neo4j"
 
 _REMOVED_STATUSES = frozenset({"deleted", "purged"})
 _SUPPORTED_EVENTS = frozenset({"memory.upserted", "memory.deleted"})
@@ -94,6 +101,11 @@ def _retry_or_reraise(task: Any, exc: Exception) -> NoReturn:
 
 def _is_removed(memory: Memory) -> bool:
     return memory.status in _REMOVED_STATUSES or memory.deleted_at is not None
+
+
+def qdrant_target(qdrant: Any) -> str:
+    """Qdrant 的幂等键包含 collection 身份，换模型/维度后自动回填。"""
+    return f"qdrant:{qdrant.collection}"
 
 
 def _projected_version(db: Session, memory_id: str, target: str) -> int:
@@ -188,7 +200,8 @@ def _ensure_embedding(
     runtime: Runtime, db: Session, memory: Memory, *, force: bool = False
 ) -> list[float]:
     repo = EmbeddingRepository(db)
-    vector = None if force else repo.get(memory.id, runtime.embedding.name)
+    identity = runtime.embedding.identity
+    vector = None if force else repo.get(memory.id, identity)
     if vector is not None and len(vector) != runtime.embedding.dim:
         # 模型名复用但维度已变更时，旧缓存不可用。
         vector = None
@@ -196,7 +209,7 @@ def _ensure_embedding(
         generated = asyncio.run(runtime.embedding.embed([memory.content]))[0]
         repo.upsert(
             memory.id,
-            runtime.embedding.name,
+            identity,
             runtime.embedding.dim,
             generated,
         )
@@ -210,26 +223,34 @@ def project_qdrant_record(
     version: int | None = None,
     *,
     force: bool = False,
+    refresh_embedding: bool = False,
 ) -> bool:
-    """把一条记忆投影到 Qdrant；返回是否实际执行了写入。"""
+    """把一条记忆投影到 Qdrant；返回是否实际执行了写入。
+
+    ``force`` 同时用于重建（跳过版本检查并重算嵌入）；普通投影只在嵌入
+    缺失或身份不匹配时补齐。
+    """
     runtime = get_runtime()
+    target = qdrant_target(runtime.qdrant)
     target_version = int(version or memory.version)
-    if not force and _projected_version(db, memory.id, "qdrant") >= target_version:
+    if not force and _projected_version(db, memory.id, target) >= target_version:
         return False
 
     if _is_removed(memory):
         runtime.qdrant.delete(memory.id)
-        mark_projected(db, memory.id, "qdrant", target_version)
+        mark_projected(db, memory.id, target, target_version)
         logger.info(
             "memory removed from qdrant",
             extra={"memory_id": memory.id},
         )
         return True
 
-    vector = _ensure_embedding(runtime, db, memory)
+    vector = _ensure_embedding(
+        runtime, db, memory, force=force or refresh_embedding
+    )
     entity_ids = _entity_ids(db, memory.id)
     runtime.qdrant.upsert(memory.id, vector, _qdrant_payload(memory, entity_ids))
-    mark_projected(db, memory.id, "qdrant", target_version)
+    mark_projected(db, memory.id, target, target_version)
     logger.info(
         "memory projected to qdrant",
         extra={
@@ -255,12 +276,12 @@ def project_neo4j_record(
         return False
 
     target_version = int(version or memory.version)
-    if not force and _projected_version(db, memory.id, "neo4j") >= target_version:
+    if not force and _projected_version(db, memory.id, NEO4J_TARGET) >= target_version:
         return False
 
     if _is_removed(memory):
         runtime.neo4j.delete(memory.id)
-        mark_projected(db, memory.id, "neo4j", target_version)
+        mark_projected(db, memory.id, NEO4J_TARGET, target_version)
         logger.info(
             "memory removed from neo4j",
             extra={"memory_id": memory.id},
@@ -270,8 +291,142 @@ def project_neo4j_record(
     entities = _entity_refs(db, memory.id)
     links = _links(db, memory.id)
     runtime.neo4j.upsert_memory(memory, entities, links)
-    mark_projected(db, memory.id, "neo4j", target_version)
+    mark_projected(db, memory.id, NEO4J_TARGET, target_version)
     return True
+
+
+def _record_projection_error(
+    memory_id: str, target: str, version: int, exc: Exception
+) -> None:
+    """投影失败时单独提交错误，避免随事务回滚而丢失。"""
+    runtime = get_runtime()
+    message = (str(exc) or exc.__class__.__name__)[:2000]
+    try:
+        with runtime.session_scope() as db:
+            statement = pg_insert(ProjectionState).values(
+                memory_id=memory_id,
+                target=target,
+                version=0,
+                projected_at=utcnow(),
+                error=message,
+            )
+            statement = statement.on_conflict_do_update(
+                index_elements=[ProjectionState.memory_id, ProjectionState.target],
+                set_={"error": message},
+            )
+            db.execute(statement)
+            db.commit()
+    except Exception:  # 记忆已被物理删除时 FK 会失败；不能影响重试
+        logger.exception(
+            "failed to record projection error",
+            extra={"memory_id": memory_id, "target": target},
+        )
+
+
+def _touch_event_lease(
+    runtime: Runtime, event_id: str | None, seconds: int = PROJECTION_LEASE_SECONDS
+) -> None:
+    """投影执行期间续租，避免长重试链被其他 worker 重复领取。"""
+    if not event_id:
+        return
+    with runtime.session_scope() as db:
+        db.execute(
+            update(OutboxEvent)
+            .where(
+                OutboxEvent.id == event_id,
+                OutboxEvent.status == "processing",
+            )
+            .values(next_attempt_at=utcnow() + timedelta(seconds=seconds))
+        )
+        db.commit()
+
+
+def _mark_event_done(runtime: Runtime, event_id: str | None) -> None:
+    if not event_id:
+        return
+    with runtime.session_scope() as db:
+        result = db.execute(
+            update(OutboxEvent)
+            .where(
+                OutboxEvent.id == event_id,
+                OutboxEvent.status == "processing",
+            )
+            .values(status="done", next_attempt_at=utcnow())
+        )
+        db.commit()
+        if not result.rowcount:
+            logger.warning(
+                "outbox event not marked done",
+                extra={"event_id": event_id},
+            )
+
+
+def _mark_event_failed(
+    runtime: Runtime, event_id: str | None, exc: Exception, *, dead: bool
+) -> None:
+    if not event_id:
+        return
+    message = (str(exc) or exc.__class__.__name__)[:2000]
+    with runtime.session_scope() as db:
+        event = db.get(OutboxEvent, event_id)
+        if event is None or event.status in {"done", "dead"}:
+            return
+        payload = dict(event.payload or {})
+        payload["last_error"] = message
+        payload["failed_at"] = utcnow().isoformat()
+        event.payload = payload
+        if dead:
+            event.status = "dead"
+            event.next_attempt_at = utcnow()
+        else:
+            event.next_attempt_at = utcnow() + timedelta(
+                seconds=PROJECTION_LEASE_SECONDS
+            )
+        db.commit()
+    logger.warning(
+        "outbox projection failed",
+        extra={"event_id": event_id, "dead": dead},
+    )
+
+
+def _run_qdrant_step(runtime: Runtime, memory_id: str, version: int | None) -> None:
+    with runtime.session_scope() as db:
+        memory = db.get(Memory, memory_id)
+        if memory is None:
+            runtime.qdrant.delete(memory_id)
+        else:
+            project_qdrant_record(
+                db, memory, version, refresh_embedding=True
+            )
+        db.commit()
+
+
+def _run_neo4j_step(runtime: Runtime, memory_id: str, version: int | None) -> None:
+    if runtime.neo4j is None:
+        return
+    with runtime.session_scope() as db:
+        memory = db.get(Memory, memory_id)
+        if memory is None:
+            runtime.neo4j.delete(memory_id)
+        else:
+            project_neo4j_record(db, memory, version)
+        db.commit()
+
+
+def _project_one(runtime: Runtime, memory_id: str, version: int | None) -> None:
+    """依次投影 Qdrant / Neo4j；任一步失败都会留下可查询的 error。"""
+    error_version = int(version or 0)
+    qtarget = qdrant_target(runtime.qdrant)
+    try:
+        _run_qdrant_step(runtime, memory_id, version)
+    except Exception as exc:
+        _record_projection_error(memory_id, qtarget, error_version, exc)
+        raise
+    try:
+        _run_neo4j_step(runtime, memory_id, version)
+    except Exception as exc:
+        _record_projection_error(memory_id, NEO4J_TARGET, error_version, exc)
+        raise
 
 
 def _dispatch(limit: int) -> int:
@@ -304,13 +459,9 @@ def _dispatch(limit: int) -> int:
                     )
                     event.status = "done"
                     continue
-                if event.event_type == "memory.upserted":
-                    # 先刷新嵌入；embed_memory 成功后再串联两个投影，避免
-                    # 投影读到上一版本的缓存向量。
-                    enqueue(TASK_EMBED_MEMORY, memory_id, version)
-                else:
-                    enqueue(TASK_PROJECT_QDRANT, memory_id, version)
-                    enqueue(TASK_PROJECT_NEO4J, memory_id, version)
+                # 单一编排任务负责“嵌入 → 两个投影 → 事件 done”，
+                # 只有投影真正成功才会把 outbox 置为 done。
+                enqueue(TASK_PROJECT_MEMORY, event.id, memory_id, version)
             except Exception:
                 # 保留 processing，租约到期后由其他 worker 重新投递。
                 logger.exception(
@@ -318,11 +469,31 @@ def _dispatch(limit: int) -> int:
                     extra={"event_id": event.id, "memory_id": memory_id},
                 )
                 continue
-            event.status = "done"
             dispatched += 1
 
         db.commit()
         return dispatched
+
+
+@celery_app.task(bind=True, name=TASK_PROJECT_MEMORY, **_TASK_OPTIONS)
+def project_memory(
+    self: Any, event_id: str, memory_id: str, version: int | None = None
+) -> bool:
+    """投影一条记忆的完整链路；成功后才把 outbox 事件置为 done。"""
+    runtime = get_runtime()
+    try:
+        _touch_event_lease(runtime, event_id)
+        _project_one(runtime, memory_id, version)
+        _mark_event_done(runtime, event_id)
+        return True
+    except Retry:
+        raise
+    except Exception as exc:
+        final = self.request.retries >= (self.max_retries or 0)
+        _mark_event_failed(runtime, event_id, exc, dead=final)
+        if self.request.called_directly:
+            raise Retry(exc=exc) from exc
+        raise
 
 
 @celery_app.task(bind=True, name=TASK_DISPATCH_OUTBOX, **_TASK_OPTIONS)
@@ -351,10 +522,6 @@ def embed_memory(self: Any, memory_id: str, version: int | None = None) -> bool:
                 "memory embedded",
                 extra={"memory_id": memory.id, "chars": len(memory.content)},
             )
-            # 嵌入提交后再投递投影，保证 project_qdrant 读到本版本向量。
-            project_version = version if version is not None else memory.version
-            enqueue(TASK_PROJECT_QDRANT, memory.id, project_version)
-            enqueue(TASK_PROJECT_NEO4J, memory.id, project_version)
             return True
     except Retry:
         raise
@@ -380,6 +547,13 @@ def project_qdrant(
     except Retry:
         raise
     except Exception as exc:
+        runtime = get_runtime()
+        _record_projection_error(
+            memory_id,
+            qdrant_target(runtime.qdrant),
+            int(version or 0),
+            exc,
+        )
         _retry_or_reraise(self, exc)
 
 
@@ -402,6 +576,9 @@ def project_neo4j(
     except Retry:
         raise
     except Exception as exc:
+        _record_projection_error(
+            memory_id, NEO4J_TARGET, int(version or 0), exc
+        )
         _retry_or_reraise(self, exc)
 
 
@@ -410,10 +587,12 @@ __all__ = [
     "embed_memory",
     "enqueue",
     "mark_projected",
+    "project_memory",
     "project_neo4j",
     "project_neo4j_record",
     "project_qdrant",
     "project_qdrant_record",
+    "qdrant_target",
     "reset_pending",
     "run_worker_once",
 ]

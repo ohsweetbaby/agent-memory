@@ -11,10 +11,15 @@ from typing import Any, Protocol, runtime_checkable
 
 @runtime_checkable
 class EmbeddingProvider(Protocol):
-    """文本嵌入；``name`` 是模型名，``provider`` 是供应商短名。"""
+    """文本嵌入；``name`` 是模型名，``provider`` 是供应商短名。
+
+    ``identity`` 是嵌入缓存的稳定身份（``provider:model``），切换供应商或
+    模型时必须变化，避免把旧向量误当成当前配置的结果。
+    """
 
     name: str
     provider: str
+    identity: str
     dim: int
 
     async def embed(self, texts: list[str]) -> list[list[float]]:

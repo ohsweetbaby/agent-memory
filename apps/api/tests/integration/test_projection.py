@@ -13,13 +13,21 @@ from typing import Any
 
 import pytest
 from celery.exceptions import Retry
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.adapters.embeddings import FakeEmbedding
 from app.adapters.qdrant import QdrantIndex
 from app.jobs.runtime import Runtime, configure_runtime, reset_runtime
-from app.jobs.tasks import dispatch_outbox, project_qdrant, run_worker_once
-from app.models import Memory
+from app.jobs.tasks import (
+    dispatch_outbox,
+    project_memory,
+    project_qdrant,
+    qdrant_target,
+    reset_pending,
+    run_worker_once,
+)
+from app.models import Memory, OutboxEvent, ProjectionState
 from app.models.base import utcnow
 from app.repositories.embedding import EmbeddingRepository
 from app.repositories.memory import MemoryRepository
@@ -27,6 +35,22 @@ from app.repositories.outbox import OutboxRepository
 from app.worker_cli import run_rebuild
 
 pytestmark = pytest.mark.integration
+
+
+class StubOpenAIEmbedding:
+    """固定向量的 OpenAI 兼容替身，用于验证嵌入身份切换。"""
+
+    provider = "openai"
+    name = "text-embedding-3-small"
+    identity = "openai:text-embedding-3-small"
+    dim = 8
+
+    def embed_sync(self, texts: list[str]) -> list[list[float]]:
+        return [[1.0] * self.dim for _ in texts]
+
+    async def embed(self, texts: list[str]) -> list[list[float]]:
+        return self.embed_sync(texts)
+
 
 
 class RecordingGraphIndex:
@@ -163,6 +187,43 @@ def test_rebuild_recreates_missing_points(
     assert qdrant_index.count("ws1") == 1
 
 
+def test_rebuild_is_workspace_scoped(
+    qdrant_index: QdrantIndex,
+    db_session: Session,
+    memory: Memory,
+) -> None:
+    other = Memory(
+        workspace_id="ws2",
+        scope="user",
+        scope_id="u2",
+        type="semantic",
+        content="另一个工作区的内容",
+        last_reinforced_at=utcnow(),
+        valid_from=utcnow(),
+    )
+    db_session.add(other)
+    db_session.flush()
+    assert project_qdrant.run(memory.id, memory.version) is True
+    assert project_qdrant.run(other.id, other.version) is True
+
+    qdrant_index.delete(memory.id)
+    run_rebuild("qdrant", workspace="ws1")
+
+    assert qdrant_index.count("ws1") == 1
+    assert qdrant_index.get(memory.id) is not None
+    # 另一个 workspace 的 point 与 projection_state 都不能被删除。
+    assert qdrant_index.get(other.id) is not None
+    states = {
+        state.memory_id
+        for state in db_session.scalars(
+            select(ProjectionState).where(
+                ProjectionState.memory_id.in_([memory.id, other.id])
+            )
+        )
+    }
+    assert states == {memory.id, other.id}
+
+
 def test_outbox_dispatch_projects_memory(
     db_session: Session,
     memory_with_outbox: Memory,
@@ -170,8 +231,66 @@ def test_outbox_dispatch_projects_memory(
     fake_embedding: FakeEmbedding,
 ) -> None:
     dispatch_outbox()
+    event = db_session.scalars(select(OutboxEvent)).one()
+    db_session.refresh(event)
+    assert event.status == "processing"
+    assert event.status != "done"
+
     run_worker_once()
+    db_session.refresh(event)
+    assert event.status == "done"
     assert qdrant_index.get(memory_with_outbox.id) is not None
+
+
+def test_projection_failure_records_error_and_keeps_event_processing(
+    db_session: Session,
+    memory_with_outbox: Memory,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(QdrantIndex, "upsert", raise_connection_error)
+    dispatch_outbox()
+    with pytest.raises(Retry):
+        run_worker_once()
+
+    event = db_session.scalars(select(OutboxEvent)).one()
+    db_session.refresh(event)
+    assert event.status == "processing"
+    assert "qdrant unavailable" in event.payload["last_error"]
+
+    state = db_session.scalars(
+        select(ProjectionState).where(
+            ProjectionState.memory_id == memory_with_outbox.id
+        )
+    ).one()
+    assert state.error is not None
+    assert "qdrant unavailable" in state.error
+
+
+def test_outbox_final_failure_marks_event_dead(
+    db_session: Session,
+    memory_with_outbox: Memory,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(QdrantIndex, "upsert", raise_connection_error)
+    dispatch_outbox()
+    event = db_session.scalars(select(OutboxEvent)).one()
+    try:
+        project_memory.push_request(retries=8)
+        with pytest.raises(Retry):
+            project_memory.run(event.id, memory_with_outbox.id, memory_with_outbox.version)
+    finally:
+        project_memory.pop_request()
+        reset_pending()
+
+    db_session.refresh(event)
+    assert event.status == "dead"
+    assert "qdrant unavailable" in event.payload["last_error"]
+    state = db_session.scalars(
+        select(ProjectionState).where(
+            ProjectionState.memory_id == memory_with_outbox.id
+        )
+    ).one()
+    assert "qdrant unavailable" in state.error
 
 
 def test_outbox_reembeds_after_content_change(
@@ -181,7 +300,9 @@ def test_outbox_reembeds_after_content_change(
 ) -> None:
     dispatch_outbox()
     run_worker_once()
-    first = EmbeddingRepository(db_session).get(memory_with_outbox.id, "fake-8")
+    first = EmbeddingRepository(db_session).get(
+        memory_with_outbox.id, "fake:fake-8"
+    )
     assert first == fake_embedding.embed_sync([memory_with_outbox.content])[0]
 
     memory_with_outbox.content = "用户改喝红茶"
@@ -199,7 +320,9 @@ def test_outbox_reembeds_after_content_change(
 
     dispatch_outbox()
     run_worker_once()
-    second = EmbeddingRepository(db_session).get(memory_with_outbox.id, "fake-8")
+    second = EmbeddingRepository(db_session).get(
+        memory_with_outbox.id, "fake:fake-8"
+    )
     assert second == fake_embedding.embed_sync(["用户改喝红茶"])[0]
     assert second != first
 
@@ -246,3 +369,81 @@ def test_outbox_dispatch_dead_letters_exhausted_events(
 
     assert dispatch_outbox() == 0
     assert event.status == "dead"
+
+
+def test_rebuild_reembeds_with_new_provider_identity(
+    db_session: Session,
+    memory: Memory,
+    qdrant_url: str,
+) -> None:
+    assert project_qdrant.run(memory.id, memory.version) is True
+    fake_identity = "fake:fake-8"
+    fake_vector = EmbeddingRepository(db_session).get(memory.id, fake_identity)
+    assert fake_vector is not None
+
+    openai_index = QdrantIndex(
+        qdrant_url,
+        provider="openai",
+        model="text-embedding-3-small",
+        dim=8,
+    )
+    try:
+        configure_runtime(
+            Runtime(
+                session_scope=lambda: nullcontext(db_session),
+                embedding=StubOpenAIEmbedding(),
+                qdrant=openai_index,
+                neo4j=RecordingGraphIndex(),
+                eager=True,
+            )
+        )
+        run_rebuild("qdrant", workspace="ws1")
+
+        assert openai_index.count("ws1") == 1
+        openai_vector = EmbeddingRepository(db_session).get(
+            memory.id, "openai:text-embedding-3-small"
+        )
+        assert openai_vector == [1.0] * 8
+        # 切换 provider 后不会复用旧的 fake 向量。
+        assert openai_vector != fake_vector
+    finally:
+        openai_index.delete_collection()
+        openai_index.close()
+
+
+def test_projection_backfills_new_collection(
+    db_session: Session,
+    memory: Memory,
+    qdrant_url: str,
+) -> None:
+    assert project_qdrant.run(memory.id, memory.version) is True
+    alt_index = QdrantIndex(
+        qdrant_url, provider="fake", model="fake-alt-8", dim=8
+    )
+    try:
+        configure_runtime(
+            Runtime(
+                session_scope=lambda: nullcontext(db_session),
+                embedding=FakeEmbedding(dim=8, model="fake-alt-8"),
+                qdrant=alt_index,
+                neo4j=RecordingGraphIndex(),
+                eager=True,
+            )
+        )
+        # 版本未变，但 collection 身份变了，必须回填新 collection。
+        assert project_qdrant.run(memory.id, memory.version) is True
+        assert alt_index.count("ws1") == 1
+        targets = set(
+            db_session.scalars(
+                select(ProjectionState.target).where(
+                    ProjectionState.memory_id == memory.id
+                )
+            )
+        )
+        assert targets == {
+            "qdrant:mem_fake_fake-8_8",
+            qdrant_target(alt_index),
+        }
+    finally:
+        alt_index.delete_collection()
+        alt_index.close()

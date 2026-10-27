@@ -43,7 +43,16 @@ class FakeEmbedding:
         if dim <= 0:
             raise ValueError("dim 必须为正数")
         self.dim = dim
-        self.name = model or f"fake-{dim}"
+        # 即使调用方传入真实模型名，fake 也必须保留独立身份，避免假向量
+        # 进入真实模型的缓存；仅在显式提供 fake 名称时沿用。
+        if model and model.startswith("fake"):
+            self.name = model
+        else:
+            self.name = f"fake-{dim}"
+
+    @property
+    def identity(self) -> str:
+        return f"{self.provider}:{self.name}"
 
     def _vector(self, text: str) -> list[float]:
         digest = hashlib.blake2b(text.encode("utf-8"), digest_size=8).digest()
@@ -81,6 +90,10 @@ class OpenAICompatibleEmbedding:
         self.dim = dim
         self.timeout = timeout
         self.transport = transport
+
+    @property
+    def identity(self) -> str:
+        return f"{self.provider}:{self.name}"
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
         if not texts:
@@ -140,6 +153,10 @@ class LocalSentenceTransformerEmbedding:
         self._model: Any | None = None
         self._lock = threading.Lock()
 
+    @property
+    def identity(self) -> str:
+        return f"{self.provider}:{self.name}"
+
     def _load(self) -> Any:
         if self._model is not None:
             return self._model
@@ -172,7 +189,9 @@ def build_embedding_provider(settings: Settings) -> Any:
     """按配置选择嵌入 Provider；未知名称回落 OpenAI 兼容实现。"""
     provider = settings.embedding_provider.strip().lower()
     if provider in _FAKE_PROVIDERS:
-        return FakeEmbedding(dim=settings.embedding_dim, model=settings.embedding_model)
+        # Fake 永远使用 fake 专属名称；即使 EMBEDDING_MODEL 配成真实模型名，
+        # 也不会冒用该模型的身份写入缓存。
+        return FakeEmbedding(dim=settings.embedding_dim)
     if provider in _LOCAL_PROVIDERS:
         return LocalSentenceTransformerEmbedding(
             settings.embedding_model, dim=settings.embedding_dim

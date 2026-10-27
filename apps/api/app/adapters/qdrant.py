@@ -237,5 +237,41 @@ class QdrantIndex:
             wait=True,
         )
 
+    def delete_many(self, memory_ids: list[str]) -> None:
+        """批量删除 point；空列表直接返回。"""
+        if not memory_ids or not self.exists():
+            return
+        self._client.delete(
+            collection_name=self.collection,
+            points_selector=models.PointIdsList(points=list(memory_ids)),
+            wait=True,
+        )
+
+    def list_ids(self, workspace_id: str | None = None) -> list[str]:
+        """列出 collection 中的 point id，可按 workspace 收窄。
+
+        只用于重建后的孤儿清理；M1 规模下一次性收集 id 足够，后续可分页化。
+        """
+        if not self.exists():
+            return []
+        scroll_filter = self._build_filter(
+            {"workspace_id": workspace_id} if workspace_id else None
+        )
+        ids: list[str] = []
+        offset: Any | None = None
+        while True:
+            points, offset = self._client.scroll(
+                collection_name=self.collection,
+                scroll_filter=scroll_filter,
+                limit=256,
+                offset=offset,
+                with_payload=False,
+                with_vectors=False,
+            )
+            ids.extend(str(point.id) for point in points)
+            if offset is None:
+                break
+        return ids
+
 
 __all__ = ["IndexHit", "QdrantIndex", "collection_name"]

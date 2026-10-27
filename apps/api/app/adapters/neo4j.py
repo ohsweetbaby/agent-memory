@@ -263,13 +263,25 @@ class Neo4jIndex:
             record = session.run("MATCH (m:Memory) RETURN count(m) AS total").single()
         return int(record["total"]) if record else 0
 
-    def clear(self) -> None:
-        """重建索引前清空 M1 图投影；不触碰其他标签。"""
+    def clear(self, workspace_id: str | None = None) -> None:
+        """清空 M1 图投影；传 workspace 时只删该 workspace 的节点。
+
+        ``Episode`` 节点不写 ``workspace_id``（规格只要求 id/session_id），
+        因此按 workspace 清理时保留；全量重建才一并删除。
+        """
         with self._driver.session(database=self.database) as session:
-            session.run(
-                "MATCH (n) WHERE n:Memory OR n:Entity OR n:Episode "
-                "DETACH DELETE n"
-            ).consume()
+            if workspace_id is None:
+                session.run(
+                    "MATCH (n) WHERE n:Memory OR n:Entity OR n:Episode "
+                    "DETACH DELETE n"
+                ).consume()
+            else:
+                session.run(
+                    "MATCH (n) WHERE (n:Memory OR n:Entity) "
+                    "AND n.workspace_id = $workspace_id "
+                    "DETACH DELETE n",
+                    workspace_id=workspace_id,
+                ).consume()
 
 
 __all__ = ["GraphEntity", "GraphLink", "Neo4jIndex"]

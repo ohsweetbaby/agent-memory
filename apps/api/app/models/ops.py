@@ -104,7 +104,9 @@ class ProjectionState(Base):
     memory_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("memory.id", ondelete="CASCADE"), nullable=False
     )
-    target: Mapped[str] = mapped_column(String(32), nullable=False)
+    # target 包含索引身份（如 ``qdrant:mem_openai_..._1536``），换模型/维度后
+    # 会自然生成新的幂等键，旧配置不会阻止新 collection 回填。
+    target: Mapped[str] = mapped_column(String(255), nullable=False)
     version: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default=text("0")
     )

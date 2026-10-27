@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import and_, or_, select, update
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
 from app.models import OutboxEvent
@@ -89,18 +89,29 @@ class OutboxRepository:
     def dead_letter_exhausted(
         self, *, max_attempts: int = DEFAULT_MAX_ATTEMPTS
     ) -> int:
-        """把重试次数耗尽的事件标记为死信，返回本次数量。"""
-        stmt = (
-            update(OutboxEvent)
-            .where(
-                OutboxEvent.status.in_(("pending", "processing")),
-                OutboxEvent.attempts >= max_attempts,
-            )
-            .values(status="dead")
+        """把重试次数耗尽的事件标记为死信，返回本次数量。
+
+        保留最后一次失败原因：任务内失败会写 ``payload.last_error``；这里
+        为租约反复过期（worker 崩溃）的事件补一条可诊断的说明。
+        """
+        stmt = select(OutboxEvent).where(
+            OutboxEvent.status.in_(("pending", "processing")),
+            OutboxEvent.attempts >= max_attempts,
         )
-        result = self.session.execute(stmt)
-        self.session.flush()
-        return int(result.rowcount or 0)
+        events = list(self.session.scalars(stmt))
+        for event in events:
+            payload = dict(event.payload or {})
+            payload.setdefault(
+                "last_error",
+                f"outbox lease expired after {event.attempts} attempts",
+            )
+            payload["failed_at"] = datetime.now(UTC).isoformat()
+            event.payload = payload
+            event.status = "dead"
+            event.next_attempt_at = datetime.now(UTC)
+        if events:
+            self.session.flush()
+        return len(events)
 
 
 __all__ = [
