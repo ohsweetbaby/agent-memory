@@ -21,6 +21,7 @@ import inspect
 import json
 import logging
 import math
+import re
 import uuid
 from collections.abc import Iterable, Sequence
 from concurrent.futures import ThreadPoolExecutor
@@ -49,7 +50,11 @@ from app.models.base import utcnow
 from app.repositories.memory import MemoryRepository
 from app.schemas.memory import ValidationError, normalize_content
 from app.services.audit import ActorRef, actor_fields, write_audit
-from app.services.memory_write import RuleConflictJudge, emit_memory_event
+from app.services.memory_write import (
+    RuleConflictJudge,
+    emit_memory_event,
+    extract_subject_predicate,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +74,12 @@ MAX_FACT_CHARS = 8192
 MAX_CONTENT_CHARS = 8192
 #: 回滚标记；只用于审计，不参与幂等判断。
 ROLLED_BACK_KEY = "rolled_back_run_id"
+
+#: 弱候选主语过滤：覆盖写入管线未收录的移动类谓词（搬到/迁到/移居…）。
+_SUBJECT_BEFORE_LOCATION = re.compile(
+    r"^([\u4e00-\u9fffA-Za-z0-9_]{1,16}?)"
+    r"(?:住在|居住在|搬到|迁到|搬去|移居到?|位于)"
+)
 
 CONSOLIDATION_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -554,6 +565,29 @@ def _find_candidates(
     )
 
 
+def _subject_of(content: str) -> str | None:
+    """粗粒度主语提取：先复用写入管线，再补“搬到/迁到”等移动谓词。"""
+    extracted = extract_subject_predicate(content)
+    if extracted is not None:
+        return extracted[0]
+    match = _SUBJECT_BEFORE_LOCATION.match(content.strip())
+    if match:
+        return match.group(1).strip() or None
+    return None
+
+
+def _weak_candidate_subject_matches(fact: str, candidate: str) -> bool:
+    """弱候选（仅用于冲突判定）要求主语一致，避免“父母住在北京”被误取代。
+
+    任一方提取不出主语时保持保守放行，具体矛盾仍由 ``RuleConflictJudge`` 判定。
+    """
+    new_subject = _subject_of(fact)
+    old_subject = _subject_of(candidate)
+    if new_subject is None or old_subject is None:
+        return True
+    return new_subject.casefold() == old_subject.casefold()
+
+
 def _plan_facts(
     db: Session,
     *,
@@ -593,7 +627,11 @@ def _plan_facts(
             continue
 
         contradicting = None
-        for memory, _score, _strong in candidates:
+        for memory, _score, strong in candidates:
+            if not strong and not _weak_candidate_subject_matches(
+                fact, memory.content
+            ):
+                continue
             try:
                 if judge.is_contradiction(fact, memory.content) is True:
                     contradicting = memory
@@ -1818,27 +1856,30 @@ def rollback_run(
         )
     )
 
-    seen: set[str] = set()
+    grouped: dict[str, list[AuditLog]] = {}
+    for entry in audits:
+        grouped.setdefault(entry.target_id, []).append(entry)
+
     checked: list[tuple[AuditLog, Memory]] = []
     conflicts: list[str] = []
-    for entry in audits:
-        if entry.target_id in seen:
-            continue
-        seen.add(entry.target_id)
-        memory = db.get(Memory, entry.target_id)
+    for target_id, entries in grouped.items():
+        # 同一目标可能被多条事实连续 merge：用最后一条审计的 after.version 校验，
+        # 用第一条审计的 before 恢复。两者混用会把正常合并误判为人工修改。
+        first, last = entries[0], entries[-1]
+        memory = db.get(Memory, target_id)
         if memory is None:
             # 巩固后记忆被硬删除，无法安全恢复。
-            conflicts.append(entry.target_id)
+            conflicts.append(target_id)
             continue
-        expected_version = (entry.after or {}).get("version")
+        expected_version = (last.after or {}).get("version")
         if expected_version is None or int(memory.version) != int(expected_version):
             # 巩固之后被编辑/软删/再次合并：整次回滚拒绝，避免静默覆盖。
-            conflicts.append(entry.target_id)
+            conflicts.append(target_id)
             continue
-        if job.finished_at is not None and entry.created_at > job.finished_at:
-            conflicts.append(entry.target_id)
+        if job.finished_at is not None and last.created_at > job.finished_at:
+            conflicts.append(target_id)
             continue
-        checked.append((entry, memory))
+        checked.append((first, memory))
 
     if job.finished_at is None:
         conflicts.append(job.id)

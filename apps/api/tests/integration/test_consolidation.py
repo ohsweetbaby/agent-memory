@@ -298,6 +298,33 @@ def test_rollback_restores_merged_memory_from_audit(
     assert db_session.query(Memory).filter_by(id="m-merged").one().content == "原始内容"
 
 
+def test_rollback_after_multiple_merges_into_same_target(
+    db_session, mergeable_memories, fake_llm
+) -> None:
+    """同一目标在一次运行内被多条事实 merge 时，回滚不得误判 409。"""
+    fake_llm.set_json(
+        {
+            "summary": "用户讨论了花生过敏",
+            "facts": ["用户对花生过敏", "用户不能吃花生"],
+        }
+    )
+    diff = consolidate_session(db_session, "s1")
+    assert diff.merged_memories == 2
+
+    target = db_session.get(Memory, "m-merged")
+    assert target is not None
+    assert target.version > 1
+    assert target.content != "原始内容"
+
+    # 用最后一条审计的 after.version 校验、第一条审计的 before 恢复。
+    assert rollback_run(db_session, diff.job_run_id) == diff.created_memories
+    db_session.expire_all()
+    restored = db_session.query(Memory).filter_by(id="m-merged").one()
+    assert restored.content == "原始内容"
+    assert restored.status == "active"
+    assert "merge_evidence" not in (restored.metadata_ or {})
+
+
 def test_rollback_restores_superseded_validity(
     db_session: Session, fake_llm
 ) -> None:
@@ -886,6 +913,53 @@ def test_conflict_recall_uses_recent_facts_without_entities(
     assert diff.superseded_memories == 1
     db_session.refresh(old)
     assert old.status == "superseded" and old.valid_to is not None
+
+
+def test_weak_candidate_subject_mismatch_does_not_supersede(
+    db_session: Session, fake_llm
+) -> None:
+    """弱候选主语不一致时不得触发 supersede（父母 vs 本人）。"""
+    workspace = Workspace(name="主语过滤工作区")
+    db_session.add(workspace)
+    db_session.flush()
+    started = utcnow() - timedelta(hours=1)
+    db_session.add(
+        SessionModel(
+            id="s1",
+            workspace_id=workspace.id,
+            started_at=started,
+            ended_at=started + timedelta(minutes=30),
+        )
+    )
+    db_session.flush()
+    for index in range(3):
+        _working_memory(
+            db_session,
+            workspace_id=workspace.id,
+            memory_id=f"w-subject-{index}",
+            content=f"用户提到准备搬家（第 {index} 次）",
+        )
+    old = Memory(
+        id="m-parents-city",
+        workspace_id=workspace.id,
+        scope="session",
+        scope_id="s1",
+        type="semantic",
+        content="用户父母住在北京",
+        importance=0.7,
+        status="active",
+    )
+    db_session.add(old)
+    db_session.flush()
+
+    fake_llm.set_json({"summary": "用户搬家了", "facts": ["用户搬到上海"]})
+    diff = consolidate_session(db_session, "s1")
+
+    assert diff.superseded_memories == 0
+    assert diff.created_memories == 2  # episodic + 新语义事实
+    db_session.refresh(old)
+    assert old.status == "active"
+    assert old.content == "用户父母住在北京"
 
 
 def test_unrelated_recent_fact_is_created_not_merged(
