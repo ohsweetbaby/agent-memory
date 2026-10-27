@@ -48,6 +48,7 @@ from app.schemas.memory import (
     MemoryWriteRequest,
     SourceSpec,
     ValidationError,
+    ensure_no_nul,
     normalize_content,
 )
 from app.services.audit import ActorRef, actor_fields, write_audit
@@ -65,48 +66,56 @@ MAX_CONVERSATION_CHARS = 32_000
 MAX_EVIDENCE_CHARS = 2_000
 
 SYSTEM_PROMPT = """你是记忆抽取器。从对话中抽取值得长期记住的原子事实、用户偏好、事件与技能。
-只输出 JSON 数组，不要输出解释、Markdown 或代码围栏。每个元素包含：
+只输出 JSON 对象，形如 {"candidates": [...]}，不要输出解释、Markdown 或代码围栏。每个候选包含：
 - content: 一句自包含的陈述，最多 8192 字符；
 - type: working|episodic|semantic|procedural|perceptual；
 - importance: 0 到 1；
 - confidence: 0 到 1；
 - evidence: 支持该候选的原文片段，最多 2000 字符；
 - entities: 实体数组，每项 {"name", "type", "role"}。
-不要编造对话中没有的信息；没有值得记住的内容时输出 []。"""
+不要编造对话中没有的信息；没有值得记住的内容时输出 {"candidates": []}。"""
 
-#: 传给 LLM 的结构化输出 schema（严格模式要求所有字段必填）。
+#: 传给 LLM 的结构化输出 schema。
+#: 根必须是 object：OpenAI Structured Outputs 不接受数组根。
 EXTRACTION_SCHEMA: dict[str, Any] = {
-    "type": "array",
-    "items": {
-        "type": "object",
-        "additionalProperties": False,
-        "required": [
-            "content",
-            "type",
-            "importance",
-            "confidence",
-            "evidence",
-            "entities",
-        ],
-        "properties": {
-            "content": {"type": "string"},
-            "type": {
-                "type": "string",
-                "enum": [item.value for item in MemoryType],
-            },
-            "importance": {"type": "number", "minimum": 0, "maximum": 1},
-            "confidence": {"type": "number", "minimum": 0, "maximum": 1},
-            "evidence": {"type": ["string", "null"]},
-            "entities": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "additionalProperties": False,
-                    "required": ["name", "type", "role"],
-                    "properties": {
-                        "name": {"type": "string"},
-                        "type": {"type": ["string", "null"]},
-                        "role": {"type": ["string", "null"]},
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["candidates"],
+    "properties": {
+        "candidates": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": [
+                    "content",
+                    "type",
+                    "importance",
+                    "confidence",
+                    "evidence",
+                    "entities",
+                ],
+                "properties": {
+                    "content": {"type": "string"},
+                    "type": {
+                        "type": "string",
+                        "enum": [item.value for item in MemoryType],
+                    },
+                    "importance": {"type": "number", "minimum": 0, "maximum": 1},
+                    "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+                    "evidence": {"type": ["string", "null"]},
+                    "entities": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "additionalProperties": False,
+                            "required": ["name", "type", "role"],
+                            "properties": {
+                                "name": {"type": "string"},
+                                "type": {"type": ["string", "null"]},
+                                "role": {"type": ["string", "null"]},
+                            },
+                        },
                     },
                 },
             },
@@ -142,8 +151,6 @@ class ConversationMessage(BaseModel):
         text = value.replace("\r\n", "\n").replace("\r", "\n").strip()
         if not text:
             raise ValueError("消息内容不能为空")
-        if "\x00" in text:
-            raise ValueError("消息内容包含 NUL 字符")
         return text
 
 
@@ -161,19 +168,19 @@ class ConversationIngestRequest(BaseModel):
 
 
 class _ExtractedEntity(BaseModel):
-    name: str = Field(min_length=1, max_length=255)
-    type: str | None = Field(default=None, max_length=64)
-    role: str | None = Field(default=None, max_length=32)
+    name: str = Field(min_length=1)
+    type: str | None = None
+    role: str | None = None
 
 
 class _CandidatePayload(BaseModel):
     """LLM 单个候选的 schema；越界即视为输出不可信。"""
 
-    content: str = Field(min_length=1, max_length=MAX_MESSAGE_CHARS)
+    content: str = Field(min_length=1)
     type: MemoryType = MemoryType.SEMANTIC
     importance: float = Field(default=0.5, ge=0.0, le=1.0)
     confidence: float = Field(default=0.5, ge=0.0, le=1.0)
-    evidence: str | None = Field(default=None, max_length=MAX_EVIDENCE_CHARS)
+    evidence: str | None = None
     entities: list[_ExtractedEntity] = Field(default_factory=list)
 
 
@@ -224,6 +231,17 @@ def _normalized_messages(
             continue
         result.append({"role": role, "content": content, "ts": ts})
     return result
+
+
+def _validate_request_strings(req: ConversationIngestRequest) -> None:
+    """所有入库字符串都先做 NUL 校验，统一返回 422 ``invalid_character``。"""
+    ensure_no_nul(req.workspace_id, "workspace_id")
+    ensure_no_nul(req.session_id, "session_id")
+    ensure_no_nul(req.scope_id, "scope_id")
+    for index, message in enumerate(req.messages):
+        ensure_no_nul(message.role, f"messages[{index}].role")
+        ensure_no_nul(message.content, f"messages[{index}].content")
+        ensure_no_nul(message.ts, f"messages[{index}].ts")
 
 
 def _resolve_scope(req: ConversationIngestRequest) -> tuple[Scope, str]:
@@ -323,6 +341,10 @@ def _decode_payload(raw: str) -> list[Any]:
     return data
 
 
+def _has_nul(*values: str | None) -> bool:
+    return any(isinstance(value, str) and "\x00" in value for value in values)
+
+
 def _build_outcome(data: list[Any]) -> ExtractionOutcome:
     candidates: list[Candidate] = []
     skipped = 0
@@ -334,6 +356,22 @@ def _build_outcome(data: list[Any]) -> ExtractionOutcome:
             raise ExtractionError(
                 f"候选 {index} 不符合 schema: {first.get('msg', 'invalid')}"
             ) from exc
+
+        if _has_nul(
+            payload.evidence,
+            *(
+                value
+                for entity in payload.entities
+                for value in (entity.name, entity.type, entity.role)
+            ),
+        ):
+            # LLM 返回了无法写入 Postgres 的字符：丢弃该条，不影响同批。
+            skipped += 1
+            logger.warning(
+                "extraction candidate rejected",
+                extra={"index": index, "reason": "invalid_character"},
+            )
+            continue
 
         try:
             content = normalize_content(payload.content)
@@ -351,10 +389,18 @@ def _build_outcome(data: list[Any]) -> ExtractionOutcome:
             if payload.evidence
             else None
         )
-        entities = tuple(
-            EntitySpec(name=entity.name, type=entity.type, role=entity.role)
-            for entity in payload.entities
-        )
+        entities: list[EntitySpec] = []
+        for entity in payload.entities:
+            name = entity.name.strip()[:255]
+            if not name:
+                continue
+            entities.append(
+                EntitySpec(
+                    name=name,
+                    type=entity.type.strip()[:64] if entity.type else None,
+                    role=entity.role.strip()[:32] if entity.role else None,
+                )
+            )
         candidates.append(
             Candidate(
                 content=content,
@@ -362,7 +408,7 @@ def _build_outcome(data: list[Any]) -> ExtractionOutcome:
                 importance=payload.importance,
                 confidence=payload.confidence,
                 evidence=evidence,
-                entities=entities,
+                entities=tuple(entities),
             )
         )
     return ExtractionOutcome(tuple(candidates), skipped)
@@ -428,7 +474,9 @@ def _has_pending_review(db: Session, workspace_id: str, content: str) -> bool:
     return db.scalar(statement.limit(1)) is not None
 
 
-def accept_candidate(db: Session, candidate: Candidate, actor: Any) -> WriteResult:
+def accept_candidate(
+    db: Session, candidate: Candidate, actor: Any, *, commit: bool = True
+) -> WriteResult:
     """把候选交给写入管线；绝不绕过 ``write_memory``。"""
     if not candidate.workspace_id:
         raise ValidationError(
@@ -457,7 +505,7 @@ def accept_candidate(db: Session, candidate: Candidate, actor: Any) -> WriteResu
         ),
         idempotency_key=candidate.idempotency_key,
     )
-    return write_memory(db, request, actor)
+    return write_memory(db, request, actor, commit=commit)
 
 
 def _candidate_payload(candidate: Candidate) -> dict[str, Any]:
@@ -612,17 +660,54 @@ def process_extraction_job(db: Session, job: JobRun) -> dict[str, Any]:
     return _run_extraction(db, job, params)
 
 
+#: 死信任务最多保留的消息条数与单条字符数；M1 不归档完整对话原文。
+DEAD_LETTER_MESSAGE_LIMIT = 5
+DEAD_LETTER_MESSAGE_CHARS = 2048
+
+
+def _truncate_utf8(text: str, limit: int) -> str:
+    """按 UTF-8 字节截断，避免把多字节字符切成非法序列。"""
+    encoded = text.encode("utf-8", errors="ignore")
+    if len(encoded) <= limit:
+        return text
+    return encoded[:limit].decode("utf-8", errors="ignore")
+
+
+def _redact_dead_letter_params(params: dict[str, Any]) -> dict[str, Any]:
+    """裁剪死信任务中的消息，保留幂等/排障所需字段。"""
+    messages = params.get("messages")
+    if isinstance(messages, list):
+        trimmed: list[dict[str, Any]] = []
+        for message in messages[:DEAD_LETTER_MESSAGE_LIMIT]:
+            if not isinstance(message, dict):
+                continue
+            trimmed.append(
+                {
+                    "role": message.get("role"),
+                    "ts": message.get("ts"),
+                    "content": _truncate_utf8(
+                        str(message.get("content") or ""),
+                        DEAD_LETTER_MESSAGE_CHARS,
+                    ),
+                }
+            )
+        params["messages"] = trimmed
+    params["redacted"] = True
+    return params
+
+
 def mark_job_dead(db: Session, job_id: str, exc: Exception) -> None:
     """把无法重试的抽取失败写入死信并审计。"""
     job = db.get(JobRun, job_id)
     if job is None:
         return
     message = (str(exc) or exc.__class__.__name__)[:2000]
-    params = dict(job.params or {})
+    params = _redact_dead_letter_params(dict(job.params or {}))
     job.status = "dead"
     job.error = message
     job.finished_at = utcnow()
     job.result = {**(job.result or {}), "error": message}
+    job.params = params
     write_audit(
         db,
         action="ingest.failed",
@@ -657,6 +742,7 @@ def ingest_conversation(
     db: Session, req: ConversationIngestRequest, actor: Any
 ) -> IngestResult:
     """登记一次对话抽取；相同 session + 消息重复调用返回同一 task_id。"""
+    _validate_request_strings(req)
     if not req.workspace_id:
         raise ValidationError(
             "必须指定 workspace_id", details={"field": "workspace_id"}

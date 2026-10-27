@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 from typing import Any
 
 import pytest
+from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -190,3 +193,109 @@ def test_expired_cleanup_keeps_recent_items(
 
     assert removed == 0
     assert db_session.get(ReviewItem, fresh) is not None
+
+
+def test_repeated_approve_returns_same_memory(
+    client, admin, pending_review, session_factory
+) -> None:
+    first = client.post(
+        f"/api/v1/review/{pending_review.id}/approve",
+        json={"content": "用户对花生过敏"},
+    )
+    second = client.post(
+        f"/api/v1/review/{pending_review.id}/approve",
+        json={"content": "用户对花生过敏"},
+    )
+
+    assert first.status_code == 200, first.text
+    assert second.status_code == 200, second.text
+    assert first.json()["memory_id"] == second.json()["memory_id"]
+    with session_factory() as session:
+        assert session.query(Memory).count() == 1
+
+
+def test_approve_rejects_nul_in_note(
+    client, admin, pending_review, session_factory
+) -> None:
+    r = client.post(
+        f"/api/v1/review/{pending_review.id}/approve",
+        json={"note": "备注\u0000注入"},
+    )
+
+    assert r.status_code == 422
+    assert r.json()["error"]["code"] == "invalid_character"
+    with session_factory() as session:
+        assert session.query(Memory).count() == 0
+        item = session.get(ReviewItem, pending_review.id)
+        assert item is not None and item.status == "pending"
+
+
+def test_reject_rejects_nul_in_reason(
+    client, admin, pending_review, session_factory
+) -> None:
+    r = client.post(
+        f"/api/v1/review/{pending_review.id}/reject",
+        json={"reason": "证据\u0000不足"},
+    )
+
+    assert r.status_code == 422
+    assert r.json()["error"]["code"] == "invalid_character"
+    with session_factory() as session:
+        item = session.get(ReviewItem, pending_review.id)
+        assert item is not None and item.status == "pending"
+
+
+def test_bulk_rejects_nul_in_ids(client, admin, pending_review) -> None:
+    r = client.post(
+        "/api/v1/review/bulk",
+        json={"ids": [pending_review.id, "bad\u0000id"], "action": "approve"},
+    )
+
+    assert r.status_code == 422
+    assert r.json()["error"]["code"] == "invalid_character"
+
+
+def test_concurrent_approve_and_reject_only_one_wins(
+    app,
+    client,
+    admin,
+    workspace,
+    pending_review,
+    session_factory,
+) -> None:
+    """行锁保证批准/拒绝串行；输掉的一方看到新状态返回 409。"""
+    key = client.post(
+        "/api/v1/keys",
+        json={
+            "workspace_id": workspace["id"],
+            "name": "审核并发",
+            "scopes": ["admin"],
+        },
+    ).json()["key"]
+    headers = {"Authorization": f"Bearer {key}"}
+    barrier = threading.Barrier(2)
+
+    def attempt(action: str) -> tuple[str, int]:
+        with TestClient(app, raise_server_exceptions=False) as thread_client:
+            barrier.wait(timeout=30)
+            response = thread_client.post(
+                f"/api/v1/review/{pending_review.id}/{action}",
+                json={},
+                headers=headers,
+            )
+            return action, response.status_code
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = dict(pool.map(attempt, ["approve", "reject"]))
+
+    assert sorted(results.values()) == [200, 409]
+    with session_factory() as session:
+        memory_count = session.query(Memory).count()
+        item = session.get(ReviewItem, pending_review.id)
+        assert item is not None
+    if results["approve"] == 200:
+        assert memory_count == 1
+        assert item.status == "approved"
+    else:
+        assert memory_count == 0
+        assert item.status == "rejected"

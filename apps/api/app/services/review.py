@@ -21,7 +21,7 @@ from app.config import get_current_settings
 from app.errors import ConflictError
 from app.models import ReviewItem
 from app.models.base import utcnow
-from app.schemas.memory import EntitySpec, ValidationError, normalize_content
+from app.schemas.memory import EntitySpec, ValidationError, ensure_no_nul, normalize_content
 from app.services.audit import actor_fields, write_audit
 from app.services.extraction import Candidate, accept_candidate
 
@@ -58,11 +58,16 @@ def _entity_specs(raw_candidate: dict[str, Any]) -> tuple[EntitySpec, ...]:
             continue
         entity_type = raw.get("type")
         role = raw.get("role")
+        type_text = str(entity_type).strip() if entity_type else None
+        role_text = str(role).strip() if role else None
+        ensure_no_nul(name, "entities.name")
+        ensure_no_nul(type_text, "entities.type")
+        ensure_no_nul(role_text, "entities.role")
         entities.append(
             EntitySpec(
                 name=name[:255],
-                type=str(entity_type).strip()[:64] if entity_type else None,
-                role=str(role).strip()[:32] if role else None,
+                type=type_text[:64] if type_text else None,
+                role=role_text[:32] if role_text else None,
             )
         )
     return tuple(entities)
@@ -125,6 +130,10 @@ def candidate_from_item(
     quote = raw.get("evidence") or evidence.get("quote")
     session_id = raw.get("session_id") or evidence.get("session_id")
 
+    ensure_no_nul(scope_id, "scope_id")
+    ensure_no_nul(str(session_id) if session_id else None, "session_id")
+    ensure_no_nul(str(quote) if quote else None, "evidence")
+
     try:
         confidence = float(raw.get("confidence", item.confidence))
     except (TypeError, ValueError):
@@ -158,6 +167,7 @@ def approve_review_item(
     note: str | None = None,
 ) -> ApprovalResult:
     """批准待审项；重复批准返回已写入的记忆，不重复创建。"""
+    ensure_no_nul(note, "note")
     if item.status == APPROVED:
         memory_id = (item.candidate or {}).get("memory_id")
         if memory_id:
@@ -177,7 +187,7 @@ def approve_review_item(
         importance=importance,
         memory_type=memory_type,
     )
-    result = accept_candidate(db, candidate, actor)
+    result = accept_candidate(db, candidate, actor, commit=False)
 
     item.candidate = {
         **before_candidate,
@@ -209,6 +219,7 @@ def approve_review_item(
             "note": note,
         },
     )
+    # 记忆、待审状态与审核审计在同一事务提交，避免“记忆已写、仍 pending”。
     db.commit()
     return ApprovalResult(
         memory_id=result.id,
@@ -226,6 +237,7 @@ def reject_review_item(
     reason: str | None = None,
 ) -> ReviewItem:
     """拒绝待审项；重复拒绝保持幂等，已批准则冲突。"""
+    ensure_no_nul(reason, "reason")
     if item.status == REJECTED:
         return item
     if item.status != PENDING:
@@ -260,6 +272,7 @@ def bulk_review_items(
     reason: str | None = None,
 ) -> BulkResult:
     """批量批准/拒绝；先整体校验状态，避免处理到一半才 409。"""
+    ensure_no_nul(reason, "reason")
     if action not in {"approve", "reject"}:
         raise ValidationError("action 必须是 approve 或 reject")
     if not items:

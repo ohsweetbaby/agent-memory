@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from app.adapters.embeddings import FakeEmbedding
 from app.jobs.runtime import Runtime, configure_runtime, reset_runtime
 from app.jobs.tasks import reset_pending
-from app.models import AuditLog, JobRun, Memory, ReviewItem
+from app.models import AuditLog, Entity, JobRun, Memory, ReviewItem
 from app.models.base import utcnow
 from app.services.extraction import ingest_conversation
 
@@ -76,8 +76,12 @@ def test_high_confidence_candidate_is_auto_accepted(
     ingest_conversation(db_session, ingest_payload("我吃花生会过敏"), admin)
     run_worker_once()
 
-    assert db_session.query(Memory).filter_by(content="用户对花生过敏").count() == 1
+    memory = db_session.query(Memory).filter_by(content="用户对花生过敏").one()
+    assert memory.source_type == "extraction"
     assert db_session.query(ReviewItem).count() == 0
+    assert "memory.created" in {
+        row.action for row in db_session.scalars(select(AuditLog))
+    }
     assert fake_llm.calls == 1
 
 
@@ -216,3 +220,138 @@ def test_ingest_endpoint_is_idempotent_and_audited(
         assert len(jobs) == 1
         actions = {row.action for row in session.scalars(select(AuditLog))}
     assert "ingest.created" in actions
+
+
+def test_llm_schema_root_is_object_and_parses_candidates_object(
+    db_session: Session, fake_llm, admin, ingest_payload, run_worker_once
+) -> None:
+    """Structured Outputs 不接受数组根；解析器同时兼容 candidates 对象。"""
+    fake_llm.set_json({"candidates": _candidate_json()})
+
+    ingest_conversation(db_session, ingest_payload("我吃花生会过敏"), admin)
+    run_worker_once()
+
+    schema = fake_llm.last_schema or {}
+    assert schema["type"] == "object"
+    assert schema["properties"]["candidates"]["type"] == "array"
+    assert db_session.query(Memory).filter_by(content="用户对花生过敏").count() == 1
+
+
+@pytest.mark.parametrize(
+    ("confidence", "importance"),
+    [(0.95, 0.2), (0.2, 0.95)],
+)
+def test_auto_accept_requires_both_thresholds(
+    db_session: Session,
+    fake_llm,
+    admin,
+    ingest_payload,
+    run_worker_once,
+    confidence: float,
+    importance: float,
+) -> None:
+    fake_llm.set_json(
+        _candidate_json(
+            "单阈值候选",
+            confidence=confidence,
+            importance=importance,
+        )
+    )
+
+    ingest_conversation(db_session, ingest_payload("单阈值对话"), admin)
+    run_worker_once()
+
+    assert db_session.query(Memory).count() == 0
+    assert db_session.query(ReviewItem).count() == 1
+
+
+def test_dead_letter_truncates_conversation_messages(
+    db_session: Session, fake_llm, admin, ingest_payload, run_worker_once
+) -> None:
+    fake_llm.set_text("not json")
+    messages = [
+        {"role": "user", "content": "长" * 3000 + str(index)}
+        for index in range(6)
+    ]
+
+    result = ingest_conversation(
+        db_session, ingest_payload(messages=messages), admin
+    )
+    run_worker_once()
+
+    job = _job(db_session, result.task_id)
+    assert job.status == "dead"
+    assert job.params["redacted"] is True
+    assert len(job.params["messages"]) == 5
+    assert all(
+        len(message["content"].encode("utf-8")) <= 2048
+        for message in job.params["messages"]
+    )
+
+
+def test_candidate_with_nul_evidence_is_skipped(
+    db_session: Session, fake_llm, admin, ingest_payload, run_worker_once
+) -> None:
+    fake_llm.set_json(_candidate_json(evidence="证据\u0000片段"))
+
+    result = ingest_conversation(db_session, ingest_payload("我吃花生会过敏"), admin)
+    run_worker_once()
+
+    job = _job(db_session, result.task_id)
+    assert job.status == "completed"
+    assert job.result["skipped"] == 1
+    assert db_session.query(Memory).count() == 0
+    assert db_session.query(ReviewItem).count() == 0
+
+
+def test_long_entity_name_is_truncated(
+    db_session: Session, fake_llm, admin, ingest_payload, run_worker_once
+) -> None:
+    fake_llm.set_json(
+        _candidate_json(
+            entities=[
+                {"name": "实" * 300, "type": "concept", "role": "subject"}
+            ]
+        )
+    )
+
+    ingest_conversation(db_session, ingest_payload("我吃花生会过敏"), admin)
+    run_worker_once()
+
+    entity = db_session.scalars(select(Entity)).one()
+    assert len(entity.name) == 255
+    assert db_session.query(Memory).count() == 1
+
+
+def test_ingest_rejects_nul_in_request_fields(
+    client, admin, workspace
+) -> None:
+    body = {
+        "workspace_id": workspace["id"],
+        "session_id": "s\u0000rest",
+        "messages": [{"role": "user", "content": "我吃花生会过敏"}],
+        "scope": "user",
+        "scope_id": "u-rest",
+    }
+    r = client.post("/api/v1/conversations/ingest", json=body)
+
+    assert r.status_code == 422
+    assert r.json()["error"]["code"] == "invalid_character"
+
+
+def test_ingest_rejects_nul_in_message_ts(
+    client, admin, workspace
+) -> None:
+    body = {
+        "workspace_id": workspace["id"],
+        "session_id": "s-rest",
+        "messages": [
+            {"role": "user", "content": "我吃花生会过敏", "ts": "2026-\u0000"}
+        ],
+        "scope": "user",
+        "scope_id": "u-rest",
+    }
+    r = client.post("/api/v1/conversations/ingest", json=body)
+
+    assert r.status_code == 422
+    assert r.json()["error"]["code"] == "invalid_character"

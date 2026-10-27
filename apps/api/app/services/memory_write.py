@@ -375,18 +375,30 @@ def _idempotency_key(req: MemoryWriteRequest) -> str | None:
     return key or None
 
 
+def _finish(db: Session, commit: bool) -> None:
+    """提交或仅 flush；``commit=False`` 供审核等外层事务复用。"""
+    if commit:
+        db.commit()
+    else:
+        db.flush()
+
+
 def write_memory(
     db: Session,
     req: MemoryWriteRequest,
     actor: Any,
     *,
     judge: ConflictJudge | None = None,
+    commit: bool = True,
 ) -> WriteResult:
     """写入一条记忆并提交事务。
 
     ``actor`` 可以是 :class:`AuthContext`、``AdminUser`` 或 ``ApiKey``；审计
     主体据此确定。并发写入同一 ``idempotency_key`` 时，唯一索引保证只有一条
     记忆落库，输掉竞争的一方回查后返回同一 ``id``。
+
+    ``commit=False`` 只 flush，把提交权交给调用方，用于“记忆 + 待审状态 +
+    审核审计”必须原子提交的场景。
     """
     encoded = encode_memory(req)
     key = _idempotency_key(req)
@@ -413,6 +425,7 @@ def write_memory(
             actor_id=actor_id,
             judge=resolved_judge,
             idempotency_key=key,
+            commit=commit,
         )
     except IntegrityError:
         db.rollback()
@@ -433,6 +446,7 @@ def _write(
     actor_id: str | None,
     judge: ConflictJudge,
     idempotency_key: str | None,
+    commit: bool,
 ) -> WriteResult:
     candidates = _find_candidates(repo, encoded) if req.dedupe else []
     if candidates:
@@ -458,6 +472,7 @@ def _write(
             actor_type=actor_type,
             actor_id=actor_id,
             idempotency_key=idempotency_key,
+            commit=commit,
         )
 
     if decision.kind is ConflictKind.SUPERSEDE and decision.target_id:
@@ -470,6 +485,7 @@ def _write(
             actor_type=actor_type,
             actor_id=actor_id,
             idempotency_key=idempotency_key,
+            commit=commit,
         )
 
     if decision.kind is ConflictKind.COEXIST and decision.target_id:
@@ -482,6 +498,7 @@ def _write(
             actor_type=actor_type,
             actor_id=actor_id,
             idempotency_key=idempotency_key,
+            commit=commit,
         )
 
     memory = _new_memory(encoded, "created")
@@ -490,7 +507,7 @@ def _write(
     _persist_entities(db, encoded.workspace_id, encoded, memory.id)
     _audit(db, memory, "memory.created", actor_type, actor_id)
     _emit(db, memory, "created")
-    db.commit()
+    _finish(db, commit)
     return WriteResult(memory.id, "created", (), memory.importance)
 
 
@@ -503,6 +520,7 @@ def _merge(
     actor_type: str,
     actor_id: str | None,
     idempotency_key: str | None = None,
+    commit: bool = True,
 ) -> WriteResult:
     before = _snapshot(target)
     metadata = dict(target.metadata_ or {})
@@ -565,7 +583,7 @@ def _merge(
         after=_snapshot(target),
     )
     _emit(db, target, "merged")
-    db.commit()
+    _finish(db, commit)
     return WriteResult(target.id, "merged", (), target.importance)
 
 
@@ -578,6 +596,7 @@ def _supersede(
     actor_type: str,
     actor_id: str | None,
     idempotency_key: str | None,
+    commit: bool = True,
 ) -> WriteResult:
     now = utcnow()
     old_before = _snapshot(old)
@@ -606,7 +625,7 @@ def _supersede(
 
     _emit(db, memory, "superseded")
     _emit(db, old, "superseded")
-    db.commit()
+    _finish(db, commit)
     return WriteResult(
         memory.id, "superseded", (old.id,), memory.importance
     )
@@ -621,6 +640,7 @@ def _coexist(
     actor_type: str,
     actor_id: str | None,
     idempotency_key: str | None,
+    commit: bool = True,
 ) -> WriteResult:
     now = utcnow()
     old_before = _snapshot(old)
@@ -645,7 +665,7 @@ def _coexist(
 
     _emit(db, memory, "created")
     _emit(db, old, "updated")
-    db.commit()
+    _finish(db, commit)
     return WriteResult(memory.id, "coexist", (), memory.importance)
 
 

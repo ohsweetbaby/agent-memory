@@ -21,6 +21,7 @@ from app.auth.session import AuthContext, require_scope
 from app.db import get_db
 from app.errors import BadRequestError, NotFoundError
 from app.models import ReviewItem
+from app.schemas.memory import ensure_no_nul
 from app.services.review import (
     APPROVED,
     PENDING,
@@ -54,8 +55,13 @@ class BulkRequest(BaseModel):
 
 
 def _load_item(session: Session, context: AuthContext, item_id: str) -> ReviewItem:
-    """跨 workspace 与不存在统一 404，避免枚举。"""
-    item = session.get(ReviewItem, item_id)
+    """跨 workspace 与不存在统一 404，避免枚举；加行锁串行化审核。"""
+    ensure_no_nul(item_id, "id")
+    item = session.scalar(
+        select(ReviewItem)
+        .where(ReviewItem.id == item_id)
+        .with_for_update()
+    )
     if item is None:
         raise NotFoundError("待审项不存在")
     if context.workspace_id is not None and item.workspace_id != context.workspace_id:
@@ -78,6 +84,7 @@ def list_review_items(
             "status 必须是 pending/approved/rejected/all",
             code="invalid_status",
         )
+    ensure_no_nul(workspace_id, "workspace_id")
 
     resolved = workspace_filter(context, workspace_id)
     statement = select(ReviewItem)
@@ -104,9 +111,15 @@ def bulk_review(
 ) -> dict[str, Any]:
     if len(set(payload.ids)) != len(payload.ids):
         raise BadRequestError("ids 不能重复", code="duplicate_ids")
+    for index, item_id in enumerate(payload.ids):
+        ensure_no_nul(item_id, f"ids[{index}]")
 
     items = list(
-        session.scalars(select(ReviewItem).where(ReviewItem.id.in_(payload.ids)))
+        session.scalars(
+            select(ReviewItem)
+            .where(ReviewItem.id.in_(payload.ids))
+            .with_for_update()
+        )
     )
     found = {item.id for item in items}
     missing = [item_id for item_id in payload.ids if item_id not in found]

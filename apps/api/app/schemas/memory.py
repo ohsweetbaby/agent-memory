@@ -87,6 +87,16 @@ def _invalid_character(text: str) -> str | None:
     return None
 
 
+def ensure_no_nul(value: str | None, field: str) -> None:
+    """拒绝会破坏 PostgreSQL text/JSONB 的 NUL 字符，统一 422。"""
+    if isinstance(value, str) and "\x00" in value:
+        raise ValidationError(
+            "包含无法存储的字符",
+            code="invalid_character",
+            details={"field": field, "character": "\\u0000"},
+        )
+
+
 class EntitySpec(BaseModel):
     """调用方显式提供的实体。"""
 
