@@ -10,6 +10,8 @@ export interface AdminUser {
 export interface SessionResponse {
   kind: "session" | "api_key";
   admin: AdminUser | null;
+  /** 会话 Cookie 对应的 CSRF token；API Key 请求为 null。 */
+  csrf_token: string | null;
   api_key: {
     id: string;
     workspace_id: string;

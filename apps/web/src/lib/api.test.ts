@@ -6,6 +6,7 @@ import {
   getCsrfToken,
   getErrorMessage,
   setCsrfToken,
+  UNAUTHORIZED_EVENT,
 } from "./api";
 
 function jsonResponse(
@@ -113,6 +114,52 @@ describe("api", () => {
 
     await expect(api("/stats/overview")).rejects.toBeInstanceOf(ApiError);
     expect(getCsrfToken()).toBeNull();
+  });
+
+  it("403 csrf_failed 会清空 CSRF token 并广播失效原因", async () => {
+    const target = new EventTarget();
+    const events: CustomEvent<{ reason?: string }>[] = [];
+    target.addEventListener(UNAUTHORIZED_EVENT, (event) => {
+      events.push(event as CustomEvent<{ reason?: string }>);
+    });
+    vi.stubGlobal("window", target);
+    setCsrfToken("stale-token");
+    fetchMock.mockResolvedValue(
+      jsonResponse(
+        { error: { code: "csrf_failed", message: "CSRF 校验失败" } },
+        403,
+      ),
+    );
+
+    await expect(
+      api("/auth/logout", { method: "POST" }),
+    ).rejects.toMatchObject({
+      status: 403,
+      code: "csrf_failed",
+    });
+    expect(getCsrfToken()).toBeNull();
+    expect(events).toHaveLength(1);
+    expect(events[0]?.detail).toEqual({ reason: "csrf_failed" });
+  });
+
+  it("登录密码错误不广播全局会话失效", async () => {
+    const target = new EventTarget();
+    let fired = 0;
+    target.addEventListener(UNAUTHORIZED_EVENT, () => {
+      fired += 1;
+    });
+    vi.stubGlobal("window", target);
+    fetchMock.mockResolvedValue(
+      jsonResponse(
+        { error: { code: "unauthorized", message: "用户名或密码错误" } },
+        401,
+      ),
+    );
+
+    await expect(
+      api("/auth/login", { method: "POST", json: { password: "wrong" } }),
+    ).rejects.toMatchObject({ status: 401 });
+    expect(fired).toBe(0);
   });
 
   it("网络错误给出可读提示", async () => {

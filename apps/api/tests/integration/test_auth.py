@@ -38,6 +38,19 @@ def test_me_accepts_session_cookie(client, admin) -> None:
     assert response.json()["admin"]["username"] == "admin"
 
 
+def test_me_returns_csrf_token_for_session(client, admin) -> None:
+    """持久 Cookie 会话刷新后，管理台靠 /auth/me 水合 CSRF token。"""
+    response = client.get("/api/v1/auth/me")
+    assert response.status_code == 200
+    token = response.json()["csrf_token"]
+    assert token
+    assert token == client.headers.get("X-CSRF-Token")
+
+    # 水合出的 token 必须能直接用于写操作。
+    write = client.post("/api/v1/workspaces", json={"name": "CSRF 水合"})
+    assert write.status_code == 201
+
+
 def test_me_requires_authentication(client) -> None:
     response = client.get("/api/v1/auth/me")
     assert response.status_code == 401

@@ -11,6 +11,8 @@ export const UNAUTHORIZED_EVENT = "am:unauthorized";
 
 const CSRF_STORAGE_KEY = "am.csrf-token";
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+/** 这些端点上的 401 是“未登录/密码错误”，不应广播成全局会话失效。 */
+const UNAUTHENTICATED_ENDPOINTS = new Set(["/auth/me", "/auth/login"]);
 
 export class ApiError extends Error {
   readonly status: number;
@@ -105,9 +107,11 @@ function defaultMessage(status: number): string {
   return `请求失败（HTTP ${status}）`;
 }
 
-function notifyUnauthorized(): void {
+function notifyUnauthorized(reason: "unauthorized" | "csrf_failed"): void {
   if (typeof window !== "undefined") {
-    window.dispatchEvent(new Event(UNAUTHORIZED_EVENT));
+    window.dispatchEvent(
+      new CustomEvent(UNAUTHORIZED_EVENT, { detail: { reason } }),
+    );
   }
 }
 
@@ -152,9 +156,10 @@ export async function api<T>(
 
   if (response.status === 401) {
     setCsrfToken(null);
-    // /auth/me 的 401 是“未登录”的正常探测，不触发全局跳转。
-    if (path !== "/auth/me") {
-      notifyUnauthorized();
+    // /auth/me 的 401 是“未登录”的正常探测、/auth/login 是密码错误，
+    // 都不触发全局跳转。
+    if (!UNAUTHENTICATED_ENDPOINTS.has(path)) {
+      notifyUnauthorized("unauthorized");
     }
   }
 
@@ -174,6 +179,12 @@ export async function api<T>(
 
   if (!response.ok) {
     const parsed = parseError(payload);
+    if (response.status === 403 && parsed.code === "csrf_failed") {
+      // 持久 Cookie 会话刷新后若丢了 CSRF token，所有写操作都会 403；
+      // 统一清本地会话并提示重新登录，避免静默失败。
+      setCsrfToken(null);
+      notifyUnauthorized("csrf_failed");
+    }
     throw new ApiError(
       response.status,
       parsed.code ?? `http_${response.status}`,

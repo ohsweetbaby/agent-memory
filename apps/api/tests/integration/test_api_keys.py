@@ -63,6 +63,7 @@ def test_valid_key_authenticates_me(client, read_key) -> None:
     assert body["kind"] == "api_key"
     assert body["api_key"]["workspace_id"] == read_key["workspace_id"]
     assert body["scopes"] == ["read"]
+    assert body["csrf_token"] is None
 
 
 def test_read_key_cannot_write(client, read_key) -> None:

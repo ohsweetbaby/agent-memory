@@ -14,7 +14,7 @@ interface LocationState {
 }
 
 export function LoginPage() {
-  const { admin, loading, login } = useSession();
+  const { admin, loading, login, notice, clearNotice } = useSession();
   const navigate = useNavigate();
   const location = useLocation();
   const [username, setUsername] = useState("admin");
@@ -29,6 +29,7 @@ export function LoginPage() {
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(null);
+    clearNotice();
     if (username.trim() === "" || password === "") {
       setError("请填写用户名和密码");
       return;
@@ -66,6 +67,7 @@ export function LoginPage() {
           </p>
 
           <form className="mt-5 space-y-4" onSubmit={handleSubmit} noValidate>
+            {notice ? <Alert variant="info">{notice}</Alert> : null}
             {error ? <Alert>{error}</Alert> : null}
 
             <div className="space-y-1.5">

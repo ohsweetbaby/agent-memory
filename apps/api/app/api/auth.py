@@ -22,6 +22,7 @@ from app.auth.session import (
     AuthContext,
     clear_session,
     create_session,
+    read_session,
     require_admin,
     require_auth,
 )
@@ -192,12 +193,22 @@ def logout(
 
 @router.get("/me")
 def me(
+    request: Request,
     context: AuthContext = Depends(require_auth),
 ) -> dict[str, Any]:
-    """同时接受会话 Cookie 与 Bearer API Key。"""
+    """同时接受会话 Cookie 与 Bearer API Key。
+
+    会话登录时把当次 CSRF token 一并返回，供管理台在刷新/新标签页后水合；
+    API Key 无 Cookie 会话，``csrf_token`` 为 ``None``。
+    """
+    session_payload = read_session(request) if context.kind == "session" else None
     return {
         "kind": context.kind,
         "admin": _admin_payload(context.admin) if context.admin is not None else None,
+        # 每次读取都来自签名 Cookie 中的同一 token，刷新不会改变它。
+        "csrf_token": (
+            session_payload.get("csrf") if session_payload is not None else None
+        ),
         "api_key": (
             {
                 "id": context.api_key.id,
