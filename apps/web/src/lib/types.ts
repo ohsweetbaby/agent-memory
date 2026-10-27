@@ -165,3 +165,137 @@ export interface BulkReviewResult {
   rejected: number;
   memory_ids: string[];
 }
+
+export interface WorkspaceRecord {
+  id: string;
+  name: string;
+  created_at: string;
+}
+
+export interface WorkspaceListResponse {
+  items: WorkspaceRecord[];
+  next_cursor: string | null;
+}
+
+export interface OpsPolicy {
+  decay_archive_threshold: number;
+  purge_retention_days: number;
+  review_retention_days: number;
+  audit_retention_days: number;
+  consolidation_idle_minutes: number;
+  consolidation_nightly: string;
+  search_context_budget_tokens: number;
+  search_query_rewrite: boolean;
+}
+
+export interface ProviderConfig {
+  id: string;
+  kind: string;
+  name: string;
+  base_url: string | null;
+  model: string | null;
+  dim: number | null;
+  extra: Record<string, unknown>;
+  enabled: boolean;
+  has_secret: boolean;
+}
+
+export interface ProviderListResponse {
+  items: ProviderConfig[];
+  policy: OpsPolicy;
+}
+
+export interface ProviderTestResult {
+  ok: boolean;
+  message: string;
+  latency_ms: number;
+  status_code: number | null;
+}
+
+export interface ApiKeyRecord {
+  id: string;
+  workspace_id: string;
+  name: string;
+  prefix: string;
+  scopes: string[];
+  rate_limit: number | null;
+  created_at: string;
+  last_used_at: string | null;
+  revoked_at: string | null;
+}
+
+export interface ApiKeyListResponse {
+  items: ApiKeyRecord[];
+  next_cursor: string | null;
+}
+
+export interface ApiKeyCreateResponse extends ApiKeyRecord {
+  /** 完整明文仅在创建响应中出现一次。 */
+  key: string;
+}
+
+export interface ConsolidationAction {
+  action?: string;
+  target_id?: string | null;
+  content?: string | null;
+  reason?: string | null;
+  status?: string;
+  summary?: string | null;
+}
+
+export interface ConsolidationDiff {
+  job_run_id: string | null;
+  job_run_ids: string[];
+  job_type: string;
+  dry_run: boolean;
+  replayed: boolean;
+  created_episodes: number;
+  created_memories: number;
+  merged_memories: number;
+  superseded_memories: number;
+  archived_working: number;
+  clusters: number;
+  actions: ConsolidationAction[];
+  skipped_actions: ConsolidationAction[];
+}
+
+export interface SearchWhy {
+  vector_rank: number | null;
+  bm25_rank: number | null;
+  graph_rank: number | null;
+  prior_rank: number | null;
+  rrf: number;
+}
+
+export interface SearchItem {
+  id: string;
+  type: string;
+  scope: string;
+  scope_id: string | null;
+  content: string;
+  importance: number;
+  confidence: number;
+  retention: number;
+  status: string;
+  historical: boolean;
+  valid_from: string;
+  timestamp: string;
+  superseded_by: string | null;
+  why: SearchWhy;
+  score: number;
+}
+
+export interface SearchStats {
+  candidates: number;
+  returned: number;
+  latency_ms: number;
+  mode: string;
+  channels: Record<string, number>;
+}
+
+export interface SearchResponse {
+  items: SearchItem[];
+  context_text: string;
+  stats: SearchStats;
+  degraded: string[];
+}

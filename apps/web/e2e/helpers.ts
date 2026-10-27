@@ -89,6 +89,8 @@ export async function createMemoryViaApi(
   workspaceId: string,
   content: string,
   type = "semantic",
+  scope = "user",
+  scopeId: string | null = "e2e-user",
 ): Promise<string> {
   const response = await page.request.post(`${API}/memories`, {
     headers: { "X-CSRF-Token": csrfToken },
@@ -96,8 +98,8 @@ export async function createMemoryViaApi(
       workspace_id: workspaceId,
       content,
       type,
-      scope: "user",
-      scope_id: "e2e-user",
+      scope,
+      scope_id: scopeId,
       importance: 0.6,
       dedupe: false,
     },
@@ -130,6 +132,28 @@ export async function seedMemories(
     );
   }
   return { workspaceId, ids };
+}
+
+/**
+ * 直接插入一条已完成任务，供回滚确认等 UI 用例使用。
+ *
+ * 巩固任务正常需要真实的工作记忆与 LLM，这里只验证管理台交互，
+ * 因此复用已有 ``job_run`` 表结构构造最小行。
+ */
+export function seedCompletedJob(workspaceId: string): string {
+  const jobId = randomUUID();
+  const params = JSON.stringify({
+    workspace_id: workspaceId,
+    dry_run: false,
+  });
+  psql(
+    `INSERT INTO job_run (id, type, scope, status, params, result, started_at, finished_at) VALUES (${sqlLiteral(
+      jobId,
+    )}, 'consolidate_nightly', ${sqlLiteral(
+      workspaceId,
+    )}, 'completed', ${sqlLiteral(params)}::jsonb, '{}'::jsonb, now(), now());`,
+  );
+  return jobId;
 }
 
 /** 删除所有待处理候选，保证“队列归零”断言不受其他用例播种影响。 */
