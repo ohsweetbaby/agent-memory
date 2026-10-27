@@ -36,14 +36,13 @@ from memory_core.dedupe import (
 from memory_core.importance import ImportanceSignals, score_importance
 from memory_core.types import MemoryType
 
-from app.auth.session import AuthContext
 from app.errors import NotFoundError
-from app.models import AdminUser, ApiKey, Entity, Memory, MemoryEntity, Workspace
+from app.models import Entity, Memory, MemoryEntity, Workspace
 from app.models.base import utcnow
 from app.repositories.memory import MemoryRepository
 from app.repositories.outbox import OutboxRepository
 from app.schemas.memory import MemoryWriteRequest
-from app.services.audit import write_audit
+from app.services.audit import actor_fields, write_audit
 from app.services.encoding import EncodedMemory, encode_memory
 
 logger = logging.getLogger(__name__)
@@ -144,16 +143,8 @@ def _subject_predicate_from_memory(memory: Memory) -> tuple[str, str] | None:
 
 
 def _actor_fields(actor: Any) -> tuple[str, str | None]:
-    if isinstance(actor, AuthContext):
-        if actor.api_key is not None:
-            return "api_key", actor.api_key.id
-        if actor.admin is not None:
-            return "admin", actor.admin.id
-    if isinstance(actor, AdminUser):
-        return "admin", actor.id
-    if isinstance(actor, ApiKey):
-        return "api_key", actor.id
-    raise TypeError(f"无法识别的审计主体: {type(actor)!r}")
+    """兼容旧调用点；主体解析统一在 :mod:`app.services.audit`。"""
+    return actor_fields(actor)
 
 
 def _iso(value: datetime | None) -> str | None:

@@ -16,6 +16,7 @@ from typing import Any, ContextManager
 from sqlalchemy.orm import Session
 
 from app.adapters.embeddings import build_embedding_provider
+from app.adapters.llm import build_llm_provider
 from app.adapters.neo4j import Neo4jIndex
 from app.adapters.qdrant import QdrantIndex
 from app.config import Settings, get_settings
@@ -33,6 +34,8 @@ class Runtime:
     qdrant: Any
     neo4j: Any | None = None
     eager: bool = False
+    #: 对话抽取使用的 LLM；未配置 Key 时为 None，抽取任务会进入死信。
+    llm: Any | None = None
 
     def close(self) -> None:
         for resource in (self.qdrant, self.neo4j):
@@ -80,6 +83,7 @@ def build_runtime(settings: Settings | None = None) -> Runtime:
         embedding=embedding,
         qdrant=qdrant,
         neo4j=neo4j,
+        llm=build_llm_provider(resolved),
     )
 
 

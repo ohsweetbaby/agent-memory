@@ -7,6 +7,7 @@ Docker 不可用时应先运行单元测试（``apps/api/tests/unit`` 与
 
 from __future__ import annotations
 
+import json
 import os
 
 # Docker Hub 在当前环境不可达；Ryuk 镜像无法拉取。容器由 fixture 显式 stop，
@@ -38,7 +39,7 @@ from app.adapters.qdrant import QdrantIndex  # noqa: E402
 from app.config import Settings  # noqa: E402
 from app.db import build_session_factory, get_db  # noqa: E402
 from app.main import create_app  # noqa: E402
-from app.models import AdminUser  # noqa: E402
+from app.models import AdminUser, ReviewItem, Workspace  # noqa: E402
 
 API_ROOT = Path(__file__).resolve().parents[2]
 ALEMBIC_INI = API_ROOT / "alembic.ini"
@@ -361,3 +362,112 @@ def revoked_key(client, read_key: dict[str, Any]) -> str:
     response = client.delete(f"/api/v1/keys/{read_key['id']}")
     assert response.status_code == 204, response.text
     return read_key["key"]
+
+
+class FakeLLM:
+    """可编程的 LLM 替身：按测试预置 JSON/纯文本，并记录调用次数。"""
+
+    def __init__(self) -> None:
+        self.calls = 0
+        self.last_messages: list[dict[str, str]] = []
+        self.last_schema: dict[str, Any] | None = None
+        self._json: Any = None
+        self._text: str | None = None
+
+    def set_json(self, obj: Any) -> None:
+        self._json = obj
+        self._text = None
+
+    def set_text(self, text: str) -> None:
+        self._text = text
+        self._json = None
+
+    async def complete(
+        self,
+        messages: list[dict[str, str]],
+        json_schema: dict[str, Any] | None = None,
+    ) -> str:
+        self.calls += 1
+        self.last_messages = messages
+        self.last_schema = json_schema
+        if self._text is not None:
+            return self._text
+        return json.dumps(self._json if self._json is not None else [], ensure_ascii=False)
+
+
+@pytest.fixture()
+def fake_llm() -> FakeLLM:
+    """抽取管线注入的 LLM 替身。"""
+    return FakeLLM()
+
+
+@pytest.fixture()
+def run_worker_once():
+    """直接执行 eager 队列中的 Celery 任务，不经过 broker。"""
+    from app.jobs.tasks import reset_pending, run_worker_once as _run
+
+    reset_pending()
+    try:
+        yield _run
+    finally:
+        reset_pending()
+
+
+@pytest.fixture()
+def ingest_payload(db_session: Session):
+    """构造对话抽取请求；同时在同一测试事务中创建工作区。"""
+    from app.services.extraction import ConversationIngestRequest
+
+    workspace = Workspace(name="抽取工作区")
+    db_session.add(workspace)
+    db_session.flush()
+
+    def _make(
+        content: str = "我吃花生会过敏",
+        *,
+        messages: list[dict[str, Any]] | None = None,
+        **overrides: Any,
+    ) -> Any:
+        payload: dict[str, Any] = {
+            "workspace_id": workspace.id,
+            "session_id": "s-ingest-test",
+            "messages": messages or [{"role": "user", "content": content}],
+            "scope": "session",
+            "scope_id": "s-ingest-test",
+        }
+        payload.update(overrides)
+        return ConversationIngestRequest(**payload)
+
+    return _make
+
+
+@pytest.fixture()
+def pending_review(
+    client, admin: AdminUser, workspace: dict[str, Any], session_factory: sessionmaker[Session]
+) -> SimpleNamespace:
+    """向当前测试数据库真实提交一条待审项，供 REST 队列测试使用。"""
+    candidate = {
+        "content": "用户可能对花生过敏",
+        "type": "semantic",
+        "importance": 0.6,
+        "confidence": 0.5,
+        "entities": [],
+        "scope": "user",
+        "scope_id": "u-review",
+        "session_id": "s-review",
+    }
+    with session_factory() as session:
+        item = ReviewItem(
+            workspace_id=workspace["id"],
+            candidate=candidate,
+            evidence={"quote": "可能对花生过敏", "session_id": "s-review"},
+            confidence=0.5,
+        )
+        session.add(item)
+        session.commit()
+        session.refresh(item)
+        return SimpleNamespace(
+            id=item.id,
+            workspace_id=item.workspace_id,
+            candidate=dict(item.candidate),
+        )

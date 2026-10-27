@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.api import agents, auth, keys, memories, search, stats, workspaces
+from app.api import agents, auth, ingest, keys, memories, review, search, stats, workspaces
 
 ROUTERS = (
     auth.router,
@@ -13,6 +13,8 @@ ROUTERS = (
     search.router,
     search.timeline_router,
     stats.router,
+    review.router,
+    ingest.router,
 )
 
 __all__ = ["ROUTERS"]

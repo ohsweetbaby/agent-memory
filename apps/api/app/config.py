@@ -58,6 +58,11 @@ class Settings(BaseSettings):
     llm_model: str = "gpt-4o-mini"
     llm_api_key: str = Field(default="", repr=False)
 
+    # 对话抽取：达到双阈值才自动入库，否则进入待审队列。
+    auto_accept_confidence: float = Field(default=0.75, ge=0.0, le=1.0)
+    auto_accept_importance: float = Field(default=0.5, ge=0.0, le=1.0)
+    review_retention_days: int = Field(default=90, ge=1)
+
     # 检索：M1 默认关闭查询改写；上下文预算与规格 §6.3 保持一致。
     search_query_rewrite: bool = False
     search_context_budget_tokens: int = Field(default=1500, ge=0)

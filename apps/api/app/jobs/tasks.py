@@ -29,6 +29,7 @@ from app.jobs.celery_app import celery_app
 from app.jobs.runtime import Runtime, get_runtime
 from app.models import (
     Entity,
+    JobRun,
     Memory,
     MemoryEntity,
     MemoryLink,
@@ -38,6 +39,7 @@ from app.models import (
 from app.models.base import utcnow
 from app.repositories.embedding import EmbeddingRepository
 from app.repositories.outbox import OutboxRepository
+from app.services.audit import write_audit
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +54,7 @@ TASK_PROJECT_MEMORY = "app.jobs.tasks.project_memory"
 TASK_PROJECT_QDRANT = "app.jobs.tasks.project_qdrant"
 TASK_PROJECT_NEO4J = "app.jobs.tasks.project_neo4j"
 TASK_HEAL_PROJECTION_IDENTITY = "app.jobs.tasks.heal_projection_identity"
+TASK_EXTRACT_CONVERSATION = "app.jobs.tasks.extract_conversation"
 
 NEO4J_TARGET = "neo4j"
 
@@ -67,6 +70,16 @@ _TASK_OPTIONS: dict[str, Any] = {
     "retry_backoff": 2,
     "retry_backoff_max": 300,
     "retry_jitter": True,
+}
+
+#: 抽取任务按规格 §11：最多重试 3 次、超时 10 分钟；不可重试的失败直接死信。
+_EXTRACT_OPTIONS: dict[str, Any] = {
+    "autoretry_for": (Exception,),
+    "max_retries": 3,
+    "retry_backoff": 2,
+    "retry_backoff_max": 60,
+    "retry_jitter": True,
+    "time_limit": 600,
 }
 
 
@@ -637,10 +650,45 @@ def project_neo4j(
         _retry_or_reraise(self, exc)
 
 
+@celery_app.task(bind=True, name=TASK_EXTRACT_CONVERSATION, **_EXTRACT_OPTIONS)
+def extract_conversation(self: Any, job_id: str) -> dict[str, Any] | None:
+    """执行对话抽取；不可解析的 LLM 输出直接进入死信并写审计。"""
+    from app.services.extraction import (
+        ExtractionError,
+        mark_job_dead,
+        process_extraction_job,
+    )
+
+    runtime = get_runtime()
+    try:
+        with runtime.session_scope() as db:
+            job = db.get(JobRun, job_id)
+            if job is None:
+                logger.warning("extraction job missing", extra={"job_id": job_id})
+                return None
+            if job.status in {"completed", "dead"}:
+                return dict(job.result or {})
+            return dict(process_extraction_job(db, job))
+    except ExtractionError as exc:
+        with runtime.session_scope() as db:
+            mark_job_dead(db, job_id, exc)
+        return None
+    except Retry:
+        raise
+    except Exception as exc:
+        final = self.request.retries >= (self.max_retries or 0)
+        if final:
+            with runtime.session_scope() as db:
+                mark_job_dead(db, job_id, exc)
+            raise
+        _retry_or_reraise(self, exc)
+
+
 __all__ = [
     "dispatch_outbox",
     "embed_memory",
     "enqueue",
+    "extract_conversation",
     "heal_projection_identity",
     "mark_projected",
     "project_memory",
