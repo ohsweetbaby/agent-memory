@@ -13,7 +13,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Query, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from memory_core.types import Scope
 
@@ -123,6 +123,16 @@ def _memory_payload(memory: Memory) -> dict[str, Any]:
     }
 
 
+def _contains_pattern(value: str) -> str:
+    """转义 LIKE 通配符，避免 ``query=%`` 一次匹配整个 workspace。"""
+    escaped = (
+        value.replace("\\", "\\\\")
+        .replace("%", "\\%")
+        .replace("_", "\\_")
+    )
+    return f"%{escaped}%"
+
+
 def _audit_snapshot(memory: Memory) -> dict[str, Any]:
     return {
         "content": memory.content,
@@ -149,6 +159,8 @@ def _history_payload(
                 Memory.workspace_id == memory.workspace_id,
                 Memory.superseded_by == current.id,
                 Memory.id != current.id,
+                Memory.status.not_in(("deleted", "purged")),
+                Memory.deleted_at.is_(None),
             )
             .order_by(Memory.created_at.asc(), Memory.id.asc())
         ).first()
@@ -160,17 +172,36 @@ def _history_payload(
     return history
 
 
-def _links_payload(session: Session, memory: Memory) -> list[dict[str, Any]]:
-    """返回与当前记忆直接相连的边，含出边与入边。"""
-    rows = session.scalars(
+def _link_statement(workspace_id: str, *conditions: Any) -> Any:
+    """构造限定在同一 workspace 两端的边查询。
+
+    ``memory_link`` 没有 workspace 列，通过 join 两端 ``memory`` 校验归属，
+    避免跨 workspace 的脏边被详情返回或合并迁移。
+    """
+    from_memory = aliased(Memory)
+    to_memory = aliased(Memory)
+    return (
         select(MemoryLink)
+        .join(from_memory, MemoryLink.from_id == from_memory.id)
+        .join(to_memory, MemoryLink.to_id == to_memory.id)
         .where(
+            from_memory.workspace_id == workspace_id,
+            to_memory.workspace_id == workspace_id,
+            *conditions,
+        )
+    )
+
+
+def _links_payload(session: Session, memory: Memory) -> list[dict[str, Any]]:
+    """返回与当前记忆直接相连的同 workspace 边，含出边与入边。"""
+    rows = session.scalars(
+        _link_statement(
+            memory.workspace_id,
             or_(
                 MemoryLink.from_id == memory.id,
                 MemoryLink.to_id == memory.id,
-            )
-        )
-        .order_by(MemoryLink.created_at.asc(), MemoryLink.id.asc())
+            ),
+        ).order_by(MemoryLink.created_at.asc(), MemoryLink.id.asc())
     ).all()
     return [
         {
@@ -186,34 +217,37 @@ def _links_payload(session: Session, memory: Memory) -> list[dict[str, Any]]:
 
 
 def _migrate_links(
-    session: Session, source_id: str, target_id: str
+    session: Session, source_id: str, target_id: str, workspace_id: str
 ) -> None:
     """把 source 的边迁到 target。
 
-    只处理 source 关联的边；与 target 已有等价边重复时删除 source 边，
-    迁移后产生的自环也一并删除。绝不全局删除 ``memory_link``。
+    只处理同一 workspace 内、与 source 关联的边；与 target 已有等价边重复时
+    删除 source 边，迁移后产生的自环也一并删除。绝不全局删除
+    ``memory_link``，也不触碰跨 workspace 的边。
     """
     if source_id == target_id:
         return
 
     source_links = list(
         session.scalars(
-            select(MemoryLink).where(
+            _link_statement(
+                workspace_id,
                 or_(
                     MemoryLink.from_id == source_id,
                     MemoryLink.to_id == source_id,
-                )
+                ),
             )
         )
     )
     existing = {
         (link.from_id, link.to_id, link.relation)
         for link in session.scalars(
-            select(MemoryLink).where(
+            _link_statement(
+                workspace_id,
                 or_(
                     MemoryLink.from_id == target_id,
                     MemoryLink.to_id == target_id,
-                )
+                ),
             )
         )
     }
@@ -356,7 +390,7 @@ def merge_memories(
         emit_memory_event(session, source, "merged")
 
         # 只迁移 source 的边，避免全局删除；重复边与自环就地清理。
-        _migrate_links(session, source.id, target.id)
+        _migrate_links(session, source.id, target.id, source.workspace_id)
 
         access_count += source.access_count
         evidence.append(
@@ -398,14 +432,17 @@ def forget_memories(
     context: AuthContext = Depends(require_write),
     session: Session = Depends(get_db),
 ) -> dict[str, Any]:
-    """按查询条件批量遗忘；默认软删，硬删必须 admin + confirm。"""
+    """按查询条件批量遗忘；默认软删，硬删必须 admin + confirm。
+
+    批量遗忘必须能确定工作区：管理员会话显式传 ``workspace_id``，API Key
+    省略时使用自身工作区；跨 workspace 的 Key 统一 404。
+    """
     query = payload.query.strip()
     if not query:
         raise BadRequestError("query 不能为空", code="invalid_request")
 
-    resolved = workspace_filter(context, payload.workspace_id)
-    if resolved is not None:
-        ensure_workspace(session, context, resolved)
+    resolved = resolve_workspace_id(context, payload.workspace_id)
+    ensure_workspace(session, context, resolved)
 
     if payload.hard and (
         not payload.confirm or not context.has_scope("admin")
@@ -416,17 +453,19 @@ def forget_memories(
         )
 
     statement = select(Memory).where(
-        Memory.deleted_at.is_(None), Memory.status != "deleted"
+        Memory.workspace_id == resolved,
+        Memory.deleted_at.is_(None),
+        Memory.status != "deleted",
     )
-    if resolved is not None:
-        statement = statement.where(Memory.workspace_id == resolved)
     if payload.scope is not None:
         statement = statement.where(Memory.scope == payload.scope)
     if payload.scope_id is not None:
         statement = statement.where(Memory.scope_id == payload.scope_id)
     if payload.memory_type is not None:
         statement = statement.where(Memory.type == payload.memory_type)
-    statement = statement.where(Memory.content.ilike(f"%{query}%"))
+    statement = statement.where(
+        Memory.content.ilike(_contains_pattern(query), escape="\\")
+    )
     statement = statement.order_by(Memory.created_at.asc(), Memory.id.asc())
 
     memories = list(session.scalars(statement))

@@ -219,6 +219,18 @@ def test_detail_returns_superseded_history(
     assert history[0]["status"] == "superseded"
 
 
+def test_soft_deleted_predecessor_is_hidden_from_history(
+    client, admin, superseded_pair
+) -> None:
+    old_id, new_id = superseded_pair
+    deleted = client.delete(f"/api/v1/memories/{old_id}")
+    assert deleted.status_code == 204, deleted.text
+
+    detail = client.get(f"/api/v1/memories/{new_id}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["history"] == []
+
+
 def test_merge_moves_links_and_archives_sources(
     client, admin, mergeable_pair, valid_write_payload, session_factory
 ) -> None:
@@ -293,19 +305,165 @@ def test_merge_moves_links_and_archives_sources(
         assert incoming == 1
 
 
+def test_cross_workspace_links_are_hidden_and_not_migrated(
+    client,
+    admin,
+    mergeable_pair,
+    other_workspace_memory,
+    session_factory,
+) -> None:
+    source, target = mergeable_pair
+    with session_factory() as session:
+        cross = MemoryLink(
+            from_id=source.id,
+            to_id=other_workspace_memory.id,
+            relation="cross_secret",
+            weight=0.9,
+            evidence={"secret": "cross-workspace"},
+        )
+        other_self_loop = MemoryLink(
+            from_id=other_workspace_memory.id,
+            to_id=other_workspace_memory.id,
+            relation="other_self",
+        )
+        session.add_all([cross, other_self_loop])
+        session.commit()
+        cross_id = cross.id
+        self_loop_id = other_self_loop.id
+
+    detail = client.get(f"/api/v1/memories/{source.id}").json()
+    assert all(link["id"] != cross_id for link in detail["links"])
+
+    merged = client.post(
+        "/api/v1/memories/merge",
+        json={"source_ids": [source.id], "target_id": target.id},
+    )
+    assert merged.status_code == 200, merged.text
+
+    # 跨 workspace 的边既不迁移，也不能被“清理自环”全局删除。
+    with session_factory() as session:
+        cross_row = session.get(MemoryLink, cross_id)
+        assert cross_row is not None
+        assert cross_row.from_id == source.id
+        assert cross_row.to_id == other_workspace_memory.id
+        assert session.get(MemoryLink, self_loop_id) is not None
+
+    target_detail = client.get(f"/api/v1/memories/{target.id}").json()
+    assert all(link["id"] != cross_id for link in target_detail["links"])
+
+
 def test_forget_by_query_soft_deletes_matches(
     client, admin, seeded_memories
 ) -> None:
     response = client.request(
         "DELETE",
         "/api/v1/memories",
-        json={"query": "花生过敏", "scope": "user", "hard": False},
+        json={
+            "query": "花生过敏",
+            "scope": "user",
+            "hard": False,
+            "workspace_id": seeded_memories[0].workspace_id,
+        },
     )
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["affected"] >= 1
     assert body["ids"]
     assert client.get(f"/api/v1/memories/{body['ids'][0]}").status_code == 404
+
+
+def test_forget_by_query_requires_workspace_for_admin(
+    client, admin
+) -> None:
+    response = client.request(
+        "DELETE",
+        "/api/v1/memories",
+        json={"query": "任意关键词", "hard": False},
+    )
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "invalid_request"
+
+
+def test_forget_by_query_is_workspace_scoped(
+    client,
+    admin,
+    workspace,
+    valid_write_payload,
+    other_workspace_memory,
+) -> None:
+    content = "共享的遗忘关键词"
+    primary = client.post(
+        "/api/v1/memories",
+        json=valid_write_payload(content=content, dedupe=False),
+    )
+    assert primary.status_code == 201, primary.text
+    other = client.post(
+        "/api/v1/memories",
+        json=valid_write_payload(
+            workspace_id=other_workspace_memory.workspace_id,
+            content=content,
+            dedupe=False,
+        ),
+    )
+    assert other.status_code == 201, other.text
+
+    response = client.request(
+        "DELETE",
+        "/api/v1/memories",
+        json={"query": content, "workspace_id": workspace["id"]},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["affected"] == 1
+    assert body["ids"] == [primary.json()["id"]]
+    assert client.get(f"/api/v1/memories/{primary.json()['id']}").status_code == 404
+    assert client.get(f"/api/v1/memories/{other.json()['id']}").status_code == 200
+
+
+def test_forget_by_query_escapes_like_wildcards(
+    client, admin, seeded_memories
+) -> None:
+    workspace_id = seeded_memories[0].workspace_id
+    for pattern in ("%", "_", "\\"):
+        response = client.request(
+            "DELETE",
+            "/api/v1/memories",
+            json={"query": pattern, "workspace_id": workspace_id},
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["affected"] == 0
+
+    items = client.get("/api/v1/memories?limit=200").json()["items"]
+    assert len(items) == len(seeded_memories)
+
+
+def test_forget_by_query_key_cross_workspace_returns_404(
+    client, admin, write_key, other_workspace_memory
+) -> None:
+    response = client.request(
+        "DELETE",
+        "/api/v1/memories",
+        headers={"Authorization": f"Bearer {write_key}"},
+        json={
+            "query": "秘密",
+            "workspace_id": other_workspace_memory.workspace_id,
+        },
+    )
+    assert response.status_code == 404
+
+
+def test_forget_by_query_key_defaults_to_own_workspace(
+    client, admin, write_key, memory
+) -> None:
+    response = client.request(
+        "DELETE",
+        "/api/v1/memories",
+        headers={"Authorization": f"Bearer {write_key}"},
+        json={"query": "绿茶"},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["affected"] == 1
+    assert client.get(f"/api/v1/memories/{memory.id}").status_code == 404
 
 
 def test_stats_overview_returns_counts(client, admin, seeded_memories) -> None:
@@ -317,6 +475,31 @@ def test_stats_overview_returns_counts(client, admin, seeded_memories) -> None:
     assert "pending_review" in body and body["pending_review"] >= 1
     assert "by_scope" in body
     assert body["total_episodes"] >= 1
+
+
+def test_stats_overview_returns_exact_counts(
+    client, admin, seeded_memories
+) -> None:
+    body = client.get("/api/v1/stats/overview").json()
+    assert body["total_memories"] == len(seeded_memories) == 8
+    assert body["active_memories"] == 8
+    assert body["by_type"] == {
+        "working": 0,
+        "episodic": 2,
+        "semantic": 4,
+        "procedural": 2,
+        "perceptual": 0,
+    }
+    assert body["by_scope"] == {
+        "global": 1,
+        "agent": 1,
+        "user": 4,
+        "session": 2,
+    }
+    assert body["pending_review"] == 1
+    assert body["total_episodes"] == 1
+    assert body["total_entities"] == 0
+    assert body["created_last_30_days"] == 8
 
 
 def test_timeline_is_time_ordered(client, admin, seeded_memories) -> None:
@@ -389,7 +572,11 @@ def test_forget_by_query_hard_requires_confirmation(
     response = client.request(
         "DELETE",
         "/api/v1/memories",
-        json={"query": "花生过敏", "hard": True},
+        json={
+            "query": "花生过敏",
+            "hard": True,
+            "workspace_id": seeded_memories[0].workspace_id,
+        },
     )
     assert response.status_code == 400
     assert response.json()["error"]["code"] == "confirmation_required"
@@ -402,8 +589,8 @@ def test_stats_timeseries_returns_daily_points(
     assert response.status_code == 200, response.text
     body = response.json()
     assert len(body["items"]) == 7
-    assert body["items"][-1]["count"] >= 1
-    assert sum(item["count"] for item in body["items"]) >= 1
+    assert body["items"][-1]["count"] == len(seeded_memories)
+    assert sum(item["count"] for item in body["items"]) == len(seeded_memories)
 
 
 def test_admin_session_can_access_other_workspace(
@@ -470,6 +657,16 @@ def test_timeline_supports_time_range(
     )
     assert response.status_code == 200, response.text
     assert response.json()["items"]
+
+    outside = client.get(
+        "/api/v1/timeline",
+        params={
+            "session_id": "s1",
+            "from": (now + timedelta(days=1)).isoformat(),
+        },
+    )
+    assert outside.status_code == 200, outside.text
+    assert outside.json()["items"] == []
 
 
 def test_timeline_entity_filter(
