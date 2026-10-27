@@ -143,6 +143,58 @@ def test_bulk_approve_and_reject(
         }
 
 
+def test_bulk_approve_applies_per_item_overrides(
+    client, admin, workspace, session_factory
+) -> None:
+    first = _create_item(session_factory, workspace["id"], "用户喜欢绿茶")
+    second = _create_item(session_factory, workspace["id"], "用户讨厌咖啡")
+
+    response = client.post(
+        "/api/v1/review/bulk",
+        json={
+            "ids": [first, second],
+            "action": "approve",
+            "overrides": {
+                first: {"content": "用户只喝明前绿茶", "importance": 0.9},
+                second: {"importance": 0.75},
+            },
+        },
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["approved"] == 2
+
+    with session_factory() as session:
+        memories = {
+            memory.content: memory
+            for memory in session.scalars(
+                select(Memory).where(Memory.workspace_id == workspace["id"])
+            )
+        }
+        assert set(memories) == {"用户只喝明前绿茶", "用户讨厌咖啡"}
+        assert memories["用户只喝明前绿茶"].importance == pytest.approx(0.9)
+        assert memories["用户讨厌咖啡"].importance == pytest.approx(0.75)
+
+
+def test_bulk_approve_rejects_unknown_override_ids(
+    client, admin, workspace, session_factory
+) -> None:
+    item_id = _create_item(session_factory, workspace["id"], "用户喜欢绿茶")
+    response = client.post(
+        "/api/v1/review/bulk",
+        json={
+            "ids": [item_id],
+            "action": "approve",
+            "overrides": {
+                "missing-id": {"content": "不应写入"},
+            },
+        },
+    )
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "invalid_overrides"
+    with session_factory() as session:
+        assert session.query(Memory).count() == 0
+
+
 def test_bulk_rejects_invalid_action(client, admin, workspace, session_factory) -> None:
     item_id = _create_item(session_factory, workspace["id"], "用户喜欢绿茶")
     r = client.post(

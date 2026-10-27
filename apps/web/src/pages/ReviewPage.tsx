@@ -6,13 +6,14 @@ import {
   ShieldCheck,
   ShieldX,
 } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { ReviewList } from "../components/review/ReviewList";
+import { ReviewList, type ReviewDraft } from "../components/review/ReviewList";
 import { Alert } from "../components/ui/alert";
 import { Button } from "../components/ui/button";
 import { Textarea } from "../components/ui/textarea";
 import { api, getErrorMessage } from "../lib/api";
+import { validateImportance, validateMemoryContent } from "../lib/memory";
 import type {
   BulkReviewResult,
   ReviewActionResult,
@@ -21,6 +22,23 @@ import type {
 } from "../lib/types";
 
 const PAGE_SIZE = 20;
+
+interface BulkOverridePayload {
+  content?: string;
+  importance?: number;
+}
+
+type BulkOverrides = Record<string, BulkOverridePayload>;
+
+function initialReviewDraft(item: ReviewItem): ReviewDraft {
+  return {
+    content: item.content ?? "",
+    importance:
+      item.importance === null || item.importance === undefined
+        ? ""
+        : String(item.importance),
+  };
+}
 
 function buildQuery(status: string, cursor: string | null): string {
   const params = new URLSearchParams({
@@ -39,6 +57,7 @@ export function ReviewPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [drafts, setDrafts] = useState<Record<string, ReviewDraft>>({});
   const [banner, setBanner] = useState<{
     kind: "success" | "error";
     text: string;
@@ -59,6 +78,22 @@ export function ReviewPage() {
   const items = listQuery.data?.items ?? [];
   const pendingItems = items.filter((item) => item.status === "pending");
   const selectedItems = pendingItems.filter((item) => selected.has(item.id));
+
+  useEffect(() => {
+    const serverItems = listQuery.data?.items;
+    if (!serverItems) return;
+    setDrafts((current) => {
+      const next: Record<string, ReviewDraft> = {};
+      for (const item of serverItems) {
+        // pending 项保留用户正在编辑的草稿；已处理项回到服务端内容。
+        next[item.id] =
+          item.status === "pending" && current[item.id]
+            ? current[item.id]
+            : initialReviewDraft(item);
+      }
+      return next;
+    });
+  }, [listQuery.data]);
 
   const refresh = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: ["review"] });
@@ -84,6 +119,19 @@ export function ReviewPage() {
     });
   };
 
+  const updateDraft = (id: string, draft: ReviewDraft) => {
+    setDrafts((current) => ({ ...current, [id]: draft }));
+  };
+
+  const removeDrafts = (ids: string[]) => {
+    if (ids.length === 0) return;
+    setDrafts((current) => {
+      const next = { ...current };
+      for (const id of ids) delete next[id];
+      return next;
+    });
+  };
+
   const approveItem = async (
     item: ReviewItem,
     overrides: { content: string; importance?: number },
@@ -101,6 +149,7 @@ export function ReviewPage() {
         },
       });
       setBanner({ kind: "success", text: "已通过并生成记忆" });
+      removeDrafts([item.id]);
       setSelected((current) => {
         const next = new Set(current);
         next.delete(item.id);
@@ -126,6 +175,7 @@ export function ReviewPage() {
         json: reason ? { reason } : {},
       });
       setBanner({ kind: "success", text: "已拒绝待审候选" });
+      removeDrafts([item.id]);
       setSelected((current) => {
         const next = new Set(current);
         next.delete(item.id);
@@ -142,9 +192,63 @@ export function ReviewPage() {
     }
   };
 
+  const buildBulkOverrides = (): BulkOverrides | null => {
+    const overrides: BulkOverrides = {};
+    const invalid: Record<string, string> = {};
+
+    for (const item of selectedItems) {
+      const draft = drafts[item.id];
+      if (!draft) continue;
+
+      const validation = validateMemoryContent(draft.content);
+      if (!validation.ok) {
+        invalid[item.id] = validation.message;
+        continue;
+      }
+
+      let parsedImportance: number | undefined;
+      if (draft.importance.trim() !== "") {
+        const parsed = validateImportance(draft.importance);
+        if (parsed === null) {
+          invalid[item.id] = "重要性必须是 0 到 1 之间的数字";
+          continue;
+        }
+        parsedImportance = parsed;
+      }
+
+      const override: BulkOverridePayload = {};
+      if (validation.value !== (item.content ?? "")) {
+        override.content = validation.value;
+      }
+      if (
+        parsedImportance !== undefined &&
+        (item.importance === null ||
+          item.importance === undefined ||
+          Math.abs(parsedImportance - item.importance) > 1e-9)
+      ) {
+        override.importance = parsedImportance;
+      }
+      if (Object.keys(override).length > 0) {
+        overrides[item.id] = override;
+      }
+    }
+
+    const invalidIds = Object.keys(invalid);
+    if (invalidIds.length > 0) {
+      setErrors((current) => ({ ...current, ...invalid }));
+      setBanner({
+        kind: "error",
+        text: `批量通过已取消：有 ${invalidIds.length} 条编辑内容不合法，请修正后重试。`,
+      });
+      return null;
+    }
+    return overrides;
+  };
+
   const runBulkFallback = async (
     action: "approve" | "reject",
     reason: string,
+    overrides: BulkOverrides,
   ): Promise<{
     succeeded: number;
     failed: number;
@@ -175,7 +279,7 @@ export function ReviewPage() {
         if (action === "approve") {
           await api<ReviewActionResult>(`/review/${item.id}/approve`, {
             method: "POST",
-            json: {},
+            json: overrides[item.id] ?? {},
           });
         } else {
           await api<ReviewActionResult>(`/review/${item.id}/reject`, {
@@ -205,6 +309,8 @@ export function ReviewPage() {
       return;
     }
     const ids = selectedItems.map((item) => item.id);
+    const overrides = action === "approve" ? buildBulkOverrides() : {};
+    if (overrides === null) return;
     clearSelectedErrors(ids);
     setBulkBusy(true);
     setBusyIds(new Set(ids));
@@ -215,6 +321,7 @@ export function ReviewPage() {
           ids,
           action,
           ...(reason ? { reason } : {}),
+          ...(Object.keys(overrides).length > 0 ? { overrides } : {}),
         },
       });
       setBanner({
@@ -225,11 +332,14 @@ export function ReviewPage() {
             : `已批量拒绝 ${ids.length} 条待审项`,
       });
       setSelected(new Set());
+      removeDrafts(ids);
       refresh();
     } catch (bulkError) {
       // 批量接口整体失败时按条重试，逐条呈现原因，避免一条坏数据拖垮整批。
-      const fallback = await runBulkFallback(action, reason);
+      const fallback = await runBulkFallback(action, reason, overrides);
       const reasonText = fallback.firstError ?? getErrorMessage(bulkError);
+      const failedIds = new Set(fallback.failedIds);
+      removeDrafts(ids.filter((id) => !failedIds.has(id)));
       if (fallback.failed === 0) {
         setBanner({
           kind: "success",
@@ -282,6 +392,7 @@ export function ReviewPage() {
     setPageIndex(0);
     setSelected(new Set());
     setErrors({});
+    setDrafts({});
     setBanner(null);
   };
 
@@ -365,6 +476,9 @@ export function ReviewPage() {
               批量拒绝
             </Button>
           </div>
+          <p className="w-full text-xs text-slate-500">
+            已编辑的候选会按编辑后内容通过；未编辑的仍使用原候选。
+          </p>
         </div>
       ) : null}
 
@@ -411,6 +525,8 @@ export function ReviewPage() {
             selected={selected}
             busyIds={busyIds}
             errors={errors}
+            drafts={drafts}
+            onDraftChange={updateDraft}
             onToggle={toggle}
             onApprove={(item, overrides) => void approveItem(item, overrides)}
             onReject={(item, reason) => void rejectItem(item, reason)}
@@ -422,7 +538,11 @@ export function ReviewPage() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setPageIndex((index) => Math.max(0, index - 1))}
+                onClick={() => {
+                  setPageIndex((index) => Math.max(0, index - 1));
+                  setSelected(new Set());
+                  setDrafts({});
+                }}
                 disabled={pageIndex === 0 || listQuery.isFetching}
               >
                 上一页
@@ -438,6 +558,7 @@ export function ReviewPage() {
                   ]);
                   setPageIndex((index) => index + 1);
                   setSelected(new Set());
+                  setDrafts({});
                 }}
                 disabled={!nextCursor || listQuery.isFetching}
               >

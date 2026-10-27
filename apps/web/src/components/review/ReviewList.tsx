@@ -16,11 +16,18 @@ import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Textarea } from "../ui/textarea";
 
+export interface ReviewDraft {
+  content: string;
+  importance: string;
+}
+
 interface ReviewListProps {
   items: ReviewItem[];
   selected: Set<string>;
   busyIds: Set<string>;
   errors: Record<string, string>;
+  drafts: Record<string, ReviewDraft>;
+  onDraftChange: (id: string, draft: ReviewDraft) => void;
   onToggle: (id: string) => void;
   onApprove: (
     item: ReviewItem,
@@ -36,27 +43,31 @@ function evidenceQuote(item: ReviewItem): string | null {
 
 function ReviewItemCard({
   item,
+  draft,
   selected,
   busy,
   error,
   onToggle,
+  onDraftChange,
   onApprove,
   onReject,
 }: {
   item: ReviewItem;
+  draft: ReviewDraft | undefined;
   selected: boolean;
   busy: boolean;
   error: string | null;
   onToggle: (id: string) => void;
+  onDraftChange: ReviewListProps["onDraftChange"];
   onApprove: ReviewListProps["onApprove"];
   onReject: ReviewListProps["onReject"];
 }) {
-  const [content, setContent] = useState(item.content ?? "");
-  const [importance, setImportance] = useState(
-    item.importance === null || item.importance === undefined
+  const content = draft?.content ?? item.content ?? "";
+  const importance =
+    draft?.importance ??
+    (item.importance === null || item.importance === undefined
       ? ""
-      : String(item.importance),
-  );
+      : String(item.importance));
   const [localError, setLocalError] = useState<string | null>(null);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [reason, setReason] = useState("");
@@ -135,8 +146,9 @@ function ReviewItemCard({
           <Textarea
             value={content}
             onChange={(event) => {
-              setContent(event.target.value);
+              const next = event.target.value;
               setLocalError(null);
+              onDraftChange(item.id, { content: next, importance });
             }}
             rows={3}
             disabled={!pending || busy}
@@ -156,8 +168,9 @@ function ReviewItemCard({
               step={0.01}
               value={importance}
               onChange={(event) => {
-                setImportance(event.target.value);
+                const next = event.target.value;
                 setLocalError(null);
+                onDraftChange(item.id, { content, importance: next });
               }}
               disabled={!pending || busy}
               aria-label="重要性"
@@ -269,6 +282,8 @@ export function ReviewList({
   selected,
   busyIds,
   errors,
+  drafts,
+  onDraftChange,
   onToggle,
   onApprove,
   onReject,
@@ -279,10 +294,12 @@ export function ReviewList({
         <ReviewItemCard
           key={item.id}
           item={item}
+          draft={drafts[item.id]}
           selected={selected.has(item.id)}
           busy={busyIds.has(item.id)}
           error={errors[item.id] ?? null}
           onToggle={onToggle}
+          onDraftChange={onDraftChange}
           onApprove={onApprove}
           onReject={onReject}
         />

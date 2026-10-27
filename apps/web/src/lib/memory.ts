@@ -91,7 +91,7 @@ export type ContentValidation =
 
 /**
  * 正文校验与后端 `normalize_content` 的边界保持一致：去首尾空白后
- * 非空且不超过 8192 字符（8 KB 量级）。
+ * 非空且不超过 8192 个 Unicode code point。
  */
 export function validateMemoryContent(raw: string): ContentValidation {
   const value = raw.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
@@ -101,10 +101,10 @@ export function validateMemoryContent(raw: string): ContentValidation {
   if (value.includes("\u0000")) {
     return { ok: false, message: "正文不能包含空字符（NUL）" };
   }
-  if (value.length > MAX_CONTENT_CHARS) {
+  if (Array.from(value).length > MAX_CONTENT_CHARS) {
     return {
       ok: false,
-      message: `正文不能超过 8 KB（${MAX_CONTENT_CHARS} 个字符），请精简后重试`,
+      message: `正文不能超过 ${MAX_CONTENT_CHARS} 个字符，请精简后重试`,
     };
   }
   return { ok: true, value };

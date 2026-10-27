@@ -389,7 +389,7 @@ export function MemoryDetailDrawer({
             <div className="space-y-3">
               <label className="block" htmlFor="memory-edit-content">
                 <span className="mb-1 block text-xs font-medium text-slate-600">
-                  正文（最多 {MAX_CONTENT_CHARS} 字符）
+                  正文（最多 {MAX_CONTENT_CHARS} 个字符）
                 </span>
                 <Textarea
                   id="memory-edit-content"
@@ -415,7 +415,7 @@ export function MemoryDetailDrawer({
                 </p>
               ) : null}
               <p className="text-right text-xs text-slate-400">
-                {content.length} / {MAX_CONTENT_CHARS}
+                {Array.from(content).length} / {MAX_CONTENT_CHARS}
               </p>
 
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">

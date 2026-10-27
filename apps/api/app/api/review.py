@@ -48,10 +48,18 @@ class RejectRequest(BaseModel):
     reason: str | None = Field(default=None, max_length=2000)
 
 
+class BulkOverride(BaseModel):
+    """批量通过时对单条候选的覆盖值；缺省字段沿用候选。"""
+
+    content: str | None = Field(default=None, max_length=8192)
+    importance: float | None = Field(default=None, ge=0.0, le=1.0)
+
+
 class BulkRequest(BaseModel):
     ids: list[str] = Field(min_length=1, max_length=100)
     action: Literal["approve", "reject"]
     reason: str | None = Field(default=None, max_length=2000)
+    overrides: dict[str, BulkOverride] = Field(default_factory=dict)
 
 
 def _load_item(session: Session, context: AuthContext, item_id: str) -> ReviewItem:
@@ -113,6 +121,18 @@ def bulk_review(
         raise BadRequestError("ids 不能重复", code="duplicate_ids")
     for index, item_id in enumerate(payload.ids):
         ensure_no_nul(item_id, f"ids[{index}]")
+    if payload.overrides:
+        if payload.action != "approve":
+            raise BadRequestError(
+                "overrides 仅支持批量通过", code="invalid_overrides"
+            )
+        unknown = sorted(set(payload.overrides) - set(payload.ids))
+        if unknown:
+            raise BadRequestError(
+                "overrides 包含不在 ids 中的待审项",
+                code="invalid_overrides",
+                details={"ids": unknown},
+            )
 
     items = list(
         session.scalars(
@@ -135,6 +155,7 @@ def bulk_review(
         payload.action,
         context,
         reason=payload.reason,
+        overrides=payload.overrides,
     )
     return {
         "approved": result.approved,

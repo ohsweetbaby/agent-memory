@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
@@ -270,8 +271,13 @@ def bulk_review_items(
     actor: Any,
     *,
     reason: str | None = None,
+    overrides: Mapping[str, Any] | None = None,
 ) -> BulkResult:
-    """批量批准/拒绝；先整体校验状态，避免处理到一半才 409。"""
+    """批量批准/拒绝；先整体校验状态，避免处理到一半才 409。
+
+    ``overrides`` 以待审项 id 为键，批量通过时逐条覆盖内容与重要性；
+    未提供的条目仍使用抽取候选。
+    """
     ensure_no_nul(reason, "reason")
     if action not in {"approve", "reject"}:
         raise ValidationError("action 必须是 approve 或 reject")
@@ -289,7 +295,14 @@ def bulk_review_items(
     memory_ids: list[str] = []
     for item in items:
         if action == "approve":
-            result = approve_review_item(db, item, actor)
+            override = (overrides or {}).get(item.id)
+            result = approve_review_item(
+                db,
+                item,
+                actor,
+                content=getattr(override, "content", None),
+                importance=getattr(override, "importance", None),
+            )
             approved += 1
             memory_ids.append(result.memory_id)
         else:

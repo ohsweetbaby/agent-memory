@@ -54,12 +54,25 @@ describe("validateMemoryContent", () => {
     });
   });
 
-  it("超过 8 KB 字符上限时给出中文提示", () => {
-    const result = validateMemoryContent("记".repeat(MAX_CONTENT_CHARS + 1));
+  it("8192 个字符恰好通过，8193 个字符拒绝", () => {
+    expect(validateMemoryContent("记".repeat(MAX_CONTENT_CHARS)).ok).toBe(true);
+    const result = validateMemoryContent(
+      "记".repeat(MAX_CONTENT_CHARS + 1),
+    );
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.message).toContain("8 KB");
+      expect(result.message).toContain(`${MAX_CONTENT_CHARS} 个字符`);
+      expect(result.message).not.toContain("8 KB");
     }
+  });
+
+  it("按 Unicode code point 计数，emoji 不被算成两个字符", () => {
+    const emoji = "😀".repeat(MAX_CONTENT_CHARS);
+    expect(emoji.length).toBe(MAX_CONTENT_CHARS * 2);
+    expect(validateMemoryContent(emoji).ok).toBe(true);
+    expect(
+      validateMemoryContent(`${emoji}😀`).ok,
+    ).toBe(false);
   });
 
   it("拒绝 NUL 字符", () => {
