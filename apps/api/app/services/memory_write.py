@@ -333,18 +333,21 @@ def _decide(
     encoded: EncodedMemory,
     candidates: list[tuple[Memory, float]],
     judge: ConflictJudge,
+    *,
+    temporal_change: bool = False,
 ) -> tuple[ConflictDecision, dict[str, Memory]]:
     by_id = {memory.id: memory for memory, _ in candidates}
     semantic = _semantic_target(encoded, candidates, judge)
     if semantic is not None:
-        return (
-            ConflictDecision(
-                ConflictKind.SUPERSEDE,
-                semantic.id,
-                f"judge 判定与 {semantic.id} 语义矛盾，执行取代",
-            ),
-            by_id,
+        # 调用方明确声明这是偏好/事实的时间演进时，同样绕过词面阈值，但动作
+        # 是 coexist（只关闭旧条有效期），而不是 supersede。
+        kind = ConflictKind.COEXIST if temporal_change else ConflictKind.SUPERSEDE
+        reason = (
+            f"judge 判定与 {semantic.id} 语义相关且标记为时间演进，关闭旧有效期"
+            if temporal_change
+            else f"judge 判定与 {semantic.id} 语义矛盾，执行取代"
         )
+        return ConflictDecision(kind, semantic.id, reason), by_id
 
     existing = [
         ExistingCandidate(
@@ -360,6 +363,7 @@ def _decide(
         encoded.content,
         existing,
         contradiction=False,
+        temporal_change=temporal_change,
         new_subject_predicate=extract_subject_predicate(encoded.content),
     )
     return decision, by_id
@@ -440,10 +444,18 @@ def _write(
     idempotency_key: str | None,
 ) -> WriteResult:
     candidates = _find_candidates(repo, encoded) if req.dedupe else []
-    decision, by_id = _decide(encoded, candidates, judge) if candidates else (
-        ConflictDecision(ConflictKind.CREATE, None, "无候选或未启用去重"),
-        {},
-    )
+    if candidates:
+        decision, by_id = _decide(
+            encoded,
+            candidates,
+            judge,
+            temporal_change=req.temporal_change,
+        )
+    else:
+        decision = ConflictDecision(
+            ConflictKind.CREATE, None, "无候选或未启用去重"
+        )
+        by_id = {}
 
     if decision.kind is ConflictKind.MERGE and decision.target_id:
         target = by_id[decision.target_id]
@@ -622,7 +634,7 @@ def _coexist(
     now = utcnow()
     old_before = _snapshot(old)
 
-    memory = _new_memory(encoded, "created")
+    memory = _new_memory(encoded, "coexist")
     memory.idempotency_key = idempotency_key
     repo.add(memory)
     _persist_entities(db, encoded.workspace_id, encoded, memory.id)
@@ -643,7 +655,7 @@ def _coexist(
     _emit(db, memory, "created")
     _emit(db, old, "updated")
     db.commit()
-    return WriteResult(memory.id, "created", (), memory.importance)
+    return WriteResult(memory.id, "coexist", (), memory.importance)
 
 
 def feedback_memory(

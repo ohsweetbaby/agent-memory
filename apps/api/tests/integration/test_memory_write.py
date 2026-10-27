@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
+import json
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable
 
 import pytest
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import Entity, Memory, MemoryEntity, OutboxEvent
+from app.models import AuditLog, Entity, Memory, MemoryEntity, OutboxEvent
 from app.schemas.memory import MemoryWriteRequest
 from app.services.memory_write import get_conflict_judge, write_memory
 
@@ -204,3 +206,69 @@ def test_encoding_marks_pii_and_honors_explicit_remember(
     assert body["valid_to"] is not None
     assert body["source_type"] == "message"
     assert body["source_id"] == "msg-1"
+
+
+def test_nul_character_returns_422(client, admin, valid_write_payload) -> None:
+    r = client.post(
+        "/api/v1/memories", json=valid_write_payload(content="用户\x00过敏")
+    )
+    assert r.status_code == 422
+    assert r.json()["error"]["code"] == "invalid_character"
+    details = r.json()["error"]["details"]
+    assert details["field"] == "content"
+    assert details["character"] == "\\u0000"
+
+
+def test_lone_surrogate_returns_422(client, admin, valid_write_payload) -> None:
+    # httpx 的 json= 会用 UTF-8 直接编码，无法发送孤立代理对；这里手工构造
+    # JSON 转义，模拟客户端确实传入了 \ud800。
+    payload = valid_write_payload(content="placeholder")
+    payload["content"] = "用户\ud800"
+    r = client.post(
+        "/api/v1/memories",
+        content=json.dumps(payload, ensure_ascii=True),
+        headers={"Content-Type": "application/json"},
+    )
+    assert r.status_code == 422
+    assert r.json()["error"]["code"] == "invalid_character"
+    assert r.json()["error"]["details"]["character"] == "\\ud800"
+
+
+def test_other_control_characters_roundtrip(
+    client, admin, valid_write_payload
+) -> None:
+    content = "用户说\x07\x1b[31m红色\x1b[0m"
+    r = client.post("/api/v1/memories", json=valid_write_payload(content=content))
+    assert r.status_code == 201, r.text
+    detail = client.get(f"/api/v1/memories/{r.json()['id']}").json()
+    assert detail["content"] == content
+
+
+def test_temporal_change_coexists_and_closes_old_validity(
+    client, admin, db_session, valid_write_payload
+) -> None:
+    first = client.post(
+        "/api/v1/memories", json=valid_write_payload(content="用户住在北京")
+    ).json()
+    second = client.post(
+        "/api/v1/memories",
+        json=valid_write_payload(content="用户搬到上海", temporal_change=True),
+    )
+    assert second.status_code == 201, second.text
+    assert second.json()["action"] == "coexist"
+
+    old = client.get(f"/api/v1/memories/{first['id']}").json()
+    assert old["status"] == "active"
+    assert old["valid_to"] is not None
+    assert old["superseded_by"] is None
+
+    new = client.get(f"/api/v1/memories/{second.json()['id']}").json()
+    assert new["status"] == "active"
+    assert new["superseded_by"] is None
+
+    assert db_session.scalar(
+        select(AuditLog.id).where(
+            AuditLog.action == "memory.updated",
+            AuditLog.target_id == first["id"],
+        )
+    )

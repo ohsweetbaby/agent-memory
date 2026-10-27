@@ -34,9 +34,11 @@ def normalize_content(raw: str, max_chars: int = MAX_CONTENT_CHARS) -> str:
 
     - 去首尾空白，统一换行符；
     - 删除行尾空白，把连续空行压缩为一个空行；
-    - 规范化后为空、或超过 ``max_chars`` 字符时抛 :class:`ValidationError`。
+    - 规范化后为空、含 NUL/孤立代理对、或超过 ``max_chars`` 字符时抛
+      :class:`ValidationError`。
 
-    控制字符（如 ``\\x00``、ANSI 转义）按原样保留，保证写入/读取可逆。
+    ``\\x07``、ESC 等可被 PostgreSQL 存储的控制字符按原样保留，保证写入/读取
+    可逆；只有 NUL 与无法编码为 UTF-8 的代理对会被拒绝。
     """
     if not isinstance(raw, str):
         raise ValidationError(
@@ -52,6 +54,14 @@ def normalize_content(raw: str, max_chars: int = MAX_CONTENT_CHARS) -> str:
             "content 不能为空", details={"field": "content"}
         )
 
+    invalid = _invalid_character(text)
+    if invalid is not None:
+        raise ValidationError(
+            "content 包含无法存储的字符",
+            code="invalid_character",
+            details={"field": "content", "character": invalid},
+        )
+
     if len(text) > max_chars:
         raise ValidationError(
             f"content 超过 {max_chars} 字符，请拆分后重试",
@@ -60,6 +70,21 @@ def normalize_content(raw: str, max_chars: int = MAX_CONTENT_CHARS) -> str:
         )
 
     return text
+
+
+def _invalid_character(text: str) -> str | None:
+    """返回第一个无法安全写入 PostgreSQL text 的字符转义；没有则返回 None。"""
+    for char in text:
+        code = ord(char)
+        if char == "\x00":
+            return "\\u0000"
+        if 0xD800 <= code <= 0xDFFF:
+            return f"\\u{code:04x}"
+    try:
+        text.encode("utf-8")
+    except UnicodeEncodeError as exc:  # pragma: no cover - 上面已覆盖代理对
+        return f"\\u{ord(text[exc.start]):04x}"
+    return None
 
 
 class EntitySpec(BaseModel):
@@ -95,6 +120,7 @@ class MemoryWriteRequest(BaseModel):
     source: SourceSpec | None = None
     ttl_seconds: int | None = Field(default=None, gt=0)
     dedupe: bool = True
+    temporal_change: bool = False
     idempotency_key: str | None = Field(default=None, max_length=200)
 
 
