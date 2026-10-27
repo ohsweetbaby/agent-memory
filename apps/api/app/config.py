@@ -62,6 +62,10 @@ class Settings(BaseSettings):
     auto_accept_confidence: float = Field(default=0.75, ge=0.0, le=1.0)
     auto_accept_importance: float = Field(default=0.5, ge=0.0, le=1.0)
     review_retention_days: int = Field(default=90, ge=1)
+    # 巩固：空闲触发阈值与夜间批量执行时刻（UTC）。
+    consolidation_idle_minutes: int = Field(default=30, ge=1)
+    consolidation_nightly_hour: int = Field(default=3, ge=0, le=23)
+    consolidation_nightly_minute: int = Field(default=0, ge=0, le=59)
 
     # 检索：M1 默认关闭查询改写；上下文预算与规格 §6.3 保持一致。
     search_query_rewrite: bool = False

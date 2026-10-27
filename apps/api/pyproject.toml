@@ -21,6 +21,7 @@ dependencies = [
     "qdrant-client>=1.12,<1.13",
     "neo4j>=5.26,<6",
     "jieba>=0.42.1",
+    "sse-starlette>=2.1,<4",
 ]
 
 [project.optional-dependencies]

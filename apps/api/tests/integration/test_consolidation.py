@@ -1,0 +1,747 @@
+"""巩固任务：会话/夜间巩固、dry-run、幂等、回滚与任务 REST。"""
+
+from __future__ import annotations
+
+from contextlib import nullcontext
+from datetime import timedelta
+from typing import Any
+
+import pytest
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.adapters.embeddings import FakeEmbedding
+from app.jobs.runtime import Runtime, configure_runtime, reset_runtime
+from app.models import (
+    AuditLog,
+    Entity,
+    Episode,
+    JobRun,
+    Memory,
+    MemoryEmbedding,
+    MemoryEntity,
+    MemoryLink,
+    Session as SessionModel,
+    Workspace,
+)
+from app.models.base import utcnow
+from app.services.consolidation import (
+    consolidate_nightly,
+    consolidate_session,
+    find_sessions_to_consolidate,
+    rollback_run,
+)
+
+pytestmark = pytest.mark.integration
+
+
+class NullIndex:
+    """巩固测试不触发投影；占位以满足 Runtime 依赖。"""
+
+    def upsert(self, *args: Any, **kwargs: Any) -> None:
+        return None
+
+    def delete(self, *args: Any, **kwargs: Any) -> None:
+        return None
+
+
+@pytest.fixture(autouse=True)
+def consolidation_runtime(fake_llm) -> Any:
+    """巩固服务与抽取一样，从 Runtime 取 LLM；测试注入 FakeLLM。"""
+    configure_runtime(
+        Runtime(
+            session_scope=lambda: nullcontext(None),
+            embedding=FakeEmbedding(dim=8),
+            qdrant=NullIndex(),
+            neo4j=None,
+            eager=True,
+            llm=fake_llm,
+        )
+    )
+    try:
+        yield
+    finally:
+        reset_runtime()
+
+
+def snapshot_counts(db: Session) -> dict[str, int]:
+    """dry-run 不得改动任何事实源/任务行。"""
+    return {
+        "memory": db.query(Memory).count(),
+        "episode": db.query(Episode).count(),
+        "job_run": db.query(JobRun).count(),
+    }
+
+
+def _add_entity(db: Session, workspace_id: str, name: str) -> Entity:
+    entity = Entity(workspace_id=workspace_id, name=name, type="topic")
+    db.add(entity)
+    db.flush()
+    return entity
+
+
+def _working_memory(
+    db: Session,
+    *,
+    workspace_id: str,
+    memory_id: str,
+    content: str,
+    entity: Entity | None = None,
+    session_id: str = "s1",
+) -> Memory:
+    memory = Memory(
+        id=memory_id,
+        workspace_id=workspace_id,
+        scope="session",
+        scope_id=session_id,
+        type="working",
+        content=content,
+        importance=0.4,
+        confidence=0.6,
+        status="active",
+    )
+    db.add(memory)
+    db.flush()
+    if entity is not None:
+        db.add(MemoryEntity(memory_id=memory.id, entity_id=entity.id, role="topic"))
+        db.flush()
+    return memory
+
+
+@pytest.fixture()
+def session_with_working_memories(db_session: Session) -> dict[str, Any]:
+    """会话 s1：三条同一实体的工作记忆，等待巩固为情景+语义。"""
+    workspace = Workspace(name="巩固工作区")
+    db_session.add(workspace)
+    db_session.flush()
+
+    started = utcnow() - timedelta(hours=1)
+    session = SessionModel(
+        id="s1",
+        workspace_id=workspace.id,
+        started_at=started,
+        ended_at=started + timedelta(minutes=40),
+    )
+    db_session.add(session)
+    db_session.flush()
+
+    entity = _add_entity(db_session, workspace.id, "花生")
+    _working_memory(
+        db_session,
+        workspace_id=workspace.id,
+        memory_id="w-allergy-1",
+        content="用户吃花生会过敏",
+        entity=entity,
+    )
+    _working_memory(
+        db_session,
+        workspace_id=workspace.id,
+        memory_id="w-allergy-2",
+        content="用户对花生严重过敏",
+        entity=entity,
+    )
+    _working_memory(
+        db_session,
+        workspace_id=workspace.id,
+        memory_id="w-allergy-3",
+        content="用户不能吃花生",
+        entity=entity,
+    )
+    db_session.flush()
+    return {
+        "workspace_id": workspace.id,
+        "session_id": "s1",
+        "entity_id": entity.id,
+        "memory_ids": ["w-allergy-1", "w-allergy-2", "w-allergy-3"],
+    }
+
+
+@pytest.fixture()
+def mergeable_memories(db_session: Session, fake_llm) -> dict[str, Any]:
+    """已有语义记忆与工作记忆共享实体，巩固时应合并而不是新建。"""
+    workspace = Workspace(name="合并工作区")
+    db_session.add(workspace)
+    db_session.flush()
+
+    started = utcnow() - timedelta(hours=1)
+    session = SessionModel(
+        id="s1",
+        workspace_id=workspace.id,
+        started_at=started,
+        ended_at=started + timedelta(minutes=40),
+    )
+    db_session.add(session)
+    db_session.flush()
+
+    entity = _add_entity(db_session, workspace.id, "花生")
+    _working_memory(
+        db_session,
+        workspace_id=workspace.id,
+        memory_id="w-merge-1",
+        content="用户吃花生会过敏",
+        entity=entity,
+    )
+    _working_memory(
+        db_session,
+        workspace_id=workspace.id,
+        memory_id="w-merge-2",
+        content="用户对花生严重过敏",
+        entity=entity,
+    )
+    _working_memory(
+        db_session,
+        workspace_id=workspace.id,
+        memory_id="w-merge-3",
+        content="用户不能吃花生",
+        entity=entity,
+    )
+
+    existing = Memory(
+        id="m-merged",
+        workspace_id=workspace.id,
+        scope="session",
+        scope_id="s1",
+        type="semantic",
+        content="原始内容",
+        importance=0.7,
+        confidence=0.7,
+        status="active",
+    )
+    db_session.add(existing)
+    db_session.flush()
+    db_session.add(
+        MemoryEntity(memory_id=existing.id, entity_id=entity.id, role="topic")
+    )
+    db_session.flush()
+
+    fake_llm.set_json(
+        {"summary": "用户讨论了花生过敏", "facts": ["用户对花生过敏"]}
+    )
+    return {
+        "workspace_id": workspace.id,
+        "session_id": "s1",
+        "entity_id": entity.id,
+        "existing_id": existing.id,
+    }
+
+
+def test_session_consolidation_creates_episode_and_facts(
+    db_session, session_with_working_memories, fake_llm
+):
+    fake_llm.set_json({"summary": "用户讨论了过敏问题", "facts": ["用户对花生过敏"]})
+    diff = consolidate_session(db_session, "s1")
+    assert diff.created_episodes == 1
+    assert diff.created_memories >= 1
+    assert db_session.query(Episode).count() == 1
+
+
+def test_dry_run_changes_nothing(db_session, session_with_working_memories, fake_llm):
+    fake_llm.set_json({"summary": "用户讨论了过敏问题", "facts": ["用户对花生过敏"]})
+    before = snapshot_counts(db_session)
+    diff = consolidate_session(db_session, "s1", dry_run=True)
+    assert diff.created_memories >= 1
+    assert snapshot_counts(db_session) == before
+    assert diff.job_run_id is None
+    assert fake_llm.calls == 1
+
+
+def test_consolidation_is_idempotent(db_session, session_with_working_memories, fake_llm):
+    fake_llm.set_json({"summary": "用户讨论了过敏问题", "facts": ["用户对花生过敏"]})
+    first = consolidate_session(db_session, "s1")
+    second = consolidate_session(db_session, "s1")
+    assert second.created_memories == 0 and first.job_run_id == second.job_run_id
+    # 第二次调用不应再次请求 LLM，也不应重复创建情景/语义记忆。
+    assert fake_llm.calls == 1
+    assert db_session.query(Episode).count() == 1
+    assert (
+        db_session.query(Memory)
+        .filter(Memory.metadata_["consolidation_run_id"].astext == first.job_run_id)
+        .count()
+        > 0
+    )
+
+
+def test_rollback_restores_previous_state(
+    db_session, session_with_working_memories, fake_llm
+):
+    fake_llm.set_json({"summary": "用户讨论了过敏问题", "facts": ["用户对花生过敏"]})
+    diff = consolidate_session(db_session, "s1")
+    assert rollback_run(db_session, diff.job_run_id) == diff.created_memories
+    assert (
+        db_session.query(Memory)
+        .filter(Memory.metadata_["consolidation_run_id"].astext == diff.job_run_id)
+        .count()
+        == 0
+    )
+    # 工作记忆恢复为 active，情景/语义记忆被软删。
+    restored = db_session.get(Memory, "w-allergy-1")
+    assert restored is not None and restored.status == "active"
+    assert db_session.query(Episode).count() == 0
+
+
+def test_rollback_restores_merged_memory_from_audit(
+    db_session, mergeable_memories, fake_llm
+):
+    diff = consolidate_session(db_session, "s1")
+    assert diff.merged_memories == 1
+    merged = db_session.get(Memory, "m-merged")
+    assert merged is not None and merged.content != "原始内容"
+
+    rollback_run(db_session, diff.job_run_id)
+    db_session.expire_all()
+    assert db_session.query(Memory).filter_by(id="m-merged").one().content == "原始内容"
+
+
+def test_rollback_restores_superseded_validity(
+    db_session: Session, fake_llm
+) -> None:
+    workspace = Workspace(name="取代工作区")
+    db_session.add(workspace)
+    db_session.flush()
+    started = utcnow() - timedelta(hours=1)
+    db_session.add(
+        SessionModel(
+            id="s1",
+            workspace_id=workspace.id,
+            started_at=started,
+            ended_at=started + timedelta(minutes=30),
+        )
+    )
+    db_session.flush()
+    entity = _add_entity(db_session, workspace.id, "用户")
+    _working_memory(
+        db_session,
+        workspace_id=workspace.id,
+        memory_id="w-loc-1",
+        content="用户住在北京",
+        entity=entity,
+    )
+    _working_memory(
+        db_session,
+        workspace_id=workspace.id,
+        memory_id="w-loc-2",
+        content="用户长期住在北京",
+        entity=entity,
+    )
+    _working_memory(
+        db_session,
+        workspace_id=workspace.id,
+        memory_id="w-loc-3",
+        content="用户在北京工作",
+        entity=entity,
+    )
+    old = Memory(
+        id="m-old-location",
+        workspace_id=workspace.id,
+        scope="session",
+        scope_id="s1",
+        type="semantic",
+        content="用户住在北京",
+        importance=0.7,
+        status="active",
+    )
+    db_session.add(old)
+    db_session.flush()
+    db_session.add(
+        MemoryEntity(memory_id=old.id, entity_id=entity.id, role="topic")
+    )
+    db_session.flush()
+
+    fake_llm.set_json(
+        {"summary": "用户搬家了", "facts": ["用户搬到上海"]}
+    )
+    diff = consolidate_session(db_session, "s1")
+    assert diff.superseded_memories == 1
+    db_session.refresh(old)
+    assert old.status == "superseded" and old.valid_to is not None
+
+    rollback_run(db_session, diff.job_run_id)
+    db_session.refresh(old)
+    assert old.status == "active" and old.valid_to is None
+
+
+def test_llm_failure_falls_back_to_template_summary(
+    db_session, session_with_working_memories, fake_llm
+) -> None:
+    fake_llm.set_text("这不是 JSON")
+    diff = consolidate_session(db_session, "s1")
+    assert diff.created_episodes == 1
+    assert diff.created_memories == 1
+    episode = db_session.query(Episode).one()
+    assert episode.summary and "工作记忆" in episode.summary
+
+
+def test_nightly_requires_cluster_size_three(
+    db_session: Session, fake_llm
+) -> None:
+    workspace = Workspace(name="夜间工作区")
+    db_session.add(workspace)
+    db_session.flush()
+    entity = _add_entity(db_session, workspace.id, "咖啡")
+    for index in range(3):
+        memory = Memory(
+            id=f"e-coffee-{index}",
+            workspace_id=workspace.id,
+            scope="session",
+            scope_id=f"s-{index}",
+            type="episodic",
+            content=f"用户第 {index + 1} 次讨论手冲咖啡",
+            status="active",
+        )
+        db_session.add(memory)
+        db_session.flush()
+        db_session.add(
+            MemoryEntity(memory_id=memory.id, entity_id=entity.id, role="topic")
+        )
+    # 只有 2 条的簇不应处理。
+    lonely_a = Memory(
+        id="e-lonely-a",
+        workspace_id=workspace.id,
+        scope="session",
+        scope_id="s-a",
+        type="episodic",
+        content="用户提到一次茶",
+        status="active",
+    )
+    lonely_b = Memory(
+        id="e-lonely-b",
+        workspace_id=workspace.id,
+        scope="session",
+        scope_id="s-b",
+        type="episodic",
+        content="用户又提到茶",
+        status="active",
+    )
+    db_session.add_all([lonely_a, lonely_b])
+    db_session.flush()
+
+    fake_llm.set_json(
+        {"summary": "用户偏爱手冲咖啡", "facts": ["用户喜欢手冲咖啡"]}
+    )
+    start = utcnow() - timedelta(hours=24)
+    end = utcnow() + timedelta(minutes=1)
+    diff = consolidate_nightly(
+        db_session, start, end, scope=workspace.id
+    )
+
+    assert diff.clusters == 1
+    assert diff.created_memories == 1
+    facts = (
+        db_session.query(Memory)
+        .filter(
+            Memory.metadata_["consolidation_run_id"].astext == diff.job_run_id,
+            Memory.type == "semantic",
+        )
+        .all()
+    )
+    assert [fact.content for fact in facts] == ["用户喜欢手冲咖啡"]
+    links = db_session.scalars(
+        select(MemoryLink).where(
+            MemoryLink.evidence["run_id"].astext == diff.job_run_id
+        )
+    ).all()
+    assert {link.to_id for link in links} == {
+        "e-coffee-0",
+        "e-coffee-1",
+        "e-coffee-2",
+    }
+
+    replay = consolidate_nightly(db_session, start, end, scope=workspace.id)
+    assert replay.created_memories == 0
+    assert replay.job_run_id == diff.job_run_id
+
+    assert rollback_run(db_session, diff.job_run_id) == diff.created_memories
+    db_session.expire_all()
+    assert (
+        db_session.query(Memory)
+        .filter(Memory.metadata_["consolidation_run_id"].astext == diff.job_run_id)
+        .count()
+        == 0
+    )
+    assert (
+        db_session.query(MemoryLink)
+        .filter(MemoryLink.evidence["run_id"].astext == diff.job_run_id)
+        .count()
+        == 0
+    )
+    source = db_session.get(Memory, "e-coffee-0")
+    assert source is not None and source.status == "active"
+    assert "nightly_consolidation_run_id" not in (source.metadata_ or {})
+
+
+def test_nightly_clusters_by_embedding_similarity(
+    db_session: Session, fake_llm
+) -> None:
+    workspace = Workspace(name="嵌入簇工作区")
+    db_session.add(workspace)
+    db_session.flush()
+    for index in range(3):
+        memory = Memory(
+            id=f"e-vector-{index}",
+            workspace_id=workspace.id,
+            scope="user",
+            scope_id="u-vector",
+            type="episodic",
+            content=f"用户第 {index + 1} 次讨论跑步",
+            status="active",
+        )
+        db_session.add(memory)
+        db_session.flush()
+        db_session.add(
+            MemoryEmbedding(
+                memory_id=memory.id,
+                model="fake:test",
+                dim=3,
+                vector=[1.0, 0.0, 0.0],
+            )
+        )
+    # 与簇内向量正交，不能并入。
+    db_session.add(
+        Memory(
+            id="e-vector-other",
+            workspace_id=workspace.id,
+            scope="user",
+            scope_id="u-vector",
+            type="episodic",
+            content="用户讨论游泳",
+            status="active",
+        )
+    )
+    db_session.flush()
+    db_session.add(
+        MemoryEmbedding(
+            memory_id="e-vector-other",
+            model="fake:test",
+            dim=3,
+            vector=[0.0, 1.0, 0.0],
+        )
+    )
+    db_session.flush()
+
+    fake_llm.set_json({"summary": "用户坚持跑步", "facts": ["用户每周跑步"]})
+    diff = consolidate_nightly(
+        db_session,
+        utcnow() - timedelta(hours=24),
+        utcnow() + timedelta(minutes=1),
+        scope=workspace.id,
+    )
+    assert diff.clusters == 1
+    assert diff.created_memories == 1
+
+
+def test_jobs_rest_run_dry_run_and_rollback(
+    client, admin, workspace, session_factory, fake_llm
+) -> None:
+    with session_factory() as db:
+        started = utcnow() - timedelta(hours=1)
+        db.add(
+            SessionModel(
+                id="s1",
+                workspace_id=workspace["id"],
+                started_at=started,
+                ended_at=started + timedelta(minutes=30),
+            )
+        )
+        entity = Entity(workspace_id=workspace["id"], name="花生", type="topic")
+        db.add(entity)
+        db.flush()
+        for index in range(3):
+            memory = Memory(
+                id=f"w-rest-{index}",
+                workspace_id=workspace["id"],
+                scope="session",
+                scope_id="s1",
+                type="working",
+                content=f"用户讨论花生过敏第 {index} 次",
+                status="active",
+            )
+            db.add(memory)
+            db.flush()
+            db.add(
+                MemoryEntity(memory_id=memory.id, entity_id=entity.id, role="topic")
+            )
+        db.commit()
+
+    fake_llm.set_json(
+        {"summary": "用户讨论了花生过敏", "facts": ["用户对花生过敏"]}
+    )
+
+    preview = client.post(
+        "/api/v1/jobs/run",
+        json={
+            "type": "consolidate_session",
+            "params": {"session_id": "s1"},
+            "dry_run": True,
+        },
+    )
+    assert preview.status_code == 200, preview.text
+    body = preview.json()
+    assert body["job_run_id"] is None
+    assert body["created_memories"] >= 1
+    assert client.get("/api/v1/jobs").json()["items"] == []
+
+    created = client.post(
+        "/api/v1/jobs/run",
+        json={
+            "type": "consolidate_session",
+            "params": {"session_id": "s1"},
+            "dry_run": False,
+        },
+    )
+    assert created.status_code == 200, created.text
+    job_id = created.json()["job_run_id"]
+    assert job_id
+
+    listed = client.get("/api/v1/jobs").json()["items"]
+    assert [item["id"] for item in listed] == [job_id]
+    detail = client.get(f"/api/v1/jobs/{job_id}")
+    assert detail.status_code == 200
+    assert detail.json()["status"] == "completed"
+
+    events = client.get(f"/api/v1/jobs/{job_id}/events")
+    assert events.status_code == 200
+    assert events.headers["content-type"].startswith("text/event-stream")
+    assert "event: snapshot" in events.text
+    assert "event: done" in events.text
+
+    rolled_back = client.post(f"/api/v1/jobs/{job_id}/rollback")
+    assert rolled_back.status_code == 200, rolled_back.text
+    assert rolled_back.json()["restored"] == created.json()["created_memories"]
+
+
+def test_jobs_cross_workspace_is_not_found(
+    client, admin, workspace, session_factory, fake_llm
+) -> None:
+    other = client.post("/api/v1/workspaces", json={"name": "另一个工作区"})
+    assert other.status_code == 201, other.text
+    other_id = other.json()["id"]
+    with session_factory() as db:
+        started = utcnow() - timedelta(hours=1)
+        db.add(
+            SessionModel(
+                id="s-other",
+                workspace_id=other_id,
+                started_at=started,
+                ended_at=started + timedelta(minutes=10),
+            )
+        )
+        db.add(
+            Memory(
+                id="w-other",
+                workspace_id=other_id,
+                scope="session",
+                scope_id="s-other",
+                type="working",
+                content="其他工作区的工作记忆",
+                status="active",
+            )
+        )
+        db.commit()
+
+    key = client.post(
+        "/api/v1/keys",
+        json={
+            "workspace_id": workspace["id"],
+            "name": "jobs-reader",
+            "scopes": ["read"],
+        },
+    ).json()["key"]
+
+    response = client.get(
+        "/api/v1/jobs",
+        headers={"Authorization": f"Bearer {key}"},
+    )
+    assert response.status_code == 200
+    assert response.json()["items"] == []
+
+    # 写入/回滚需要 admin scope；read key 直接 403（而不是泄露 404）。
+    forbidden = client.post(
+        "/api/v1/jobs/run",
+        json={"type": "consolidate_session", "params": {"session_id": "s-other"}},
+        headers={"Authorization": f"Bearer {key}"},
+    )
+    assert forbidden.status_code == 403
+
+    # 有 admin scope 的 Key 也只能看到/回滚自己 workspace 的任务（404）。
+    admin_key = client.post(
+        "/api/v1/keys",
+        json={
+            "workspace_id": workspace["id"],
+            "name": "jobs-admin",
+            "scopes": ["admin"],
+        },
+    ).json()["key"]
+    fake_llm.set_json({"summary": "其他工作区摘要", "facts": []})
+    other_job = client.post(
+        "/api/v1/jobs/run",
+        json={"type": "consolidate_session", "params": {"session_id": "s-other"}},
+    )
+    assert other_job.status_code == 200, other_job.text
+    other_job_id = other_job.json()["job_run_id"]
+    hidden = client.get(
+        f"/api/v1/jobs/{other_job_id}",
+        headers={"Authorization": f"Bearer {admin_key}"},
+    )
+    assert hidden.status_code == 404
+    hidden_rollback = client.post(
+        f"/api/v1/jobs/{other_job_id}/rollback",
+        headers={"Authorization": f"Bearer {admin_key}"},
+    )
+    assert hidden_rollback.status_code == 404
+
+
+def test_job_audit_trail(db_session, session_with_working_memories, fake_llm) -> None:
+    fake_llm.set_json({"summary": "用户讨论了过敏问题", "facts": ["用户对花生过敏"]})
+    diff = consolidate_session(db_session, "s1")
+    actions = {
+        row.action for row in db_session.scalars(select(AuditLog))
+    }
+    assert {"consolidation.started", "consolidation.completed"} <= actions
+    rollback_run(db_session, diff.job_run_id)
+    actions = {row.action for row in db_session.scalars(select(AuditLog))}
+    assert {
+        "consolidation.started",
+        "consolidation.completed",
+        "consolidation.rolled_back",
+    } <= actions
+
+
+def test_closed_and_idle_sessions_are_detected(db_session: Session) -> None:
+    workspace = Workspace(name="触发工作区")
+    db_session.add(workspace)
+    db_session.flush()
+    now = utcnow()
+
+    def _session(session_id: str, *, ended: bool) -> None:
+        db_session.add(
+            SessionModel(
+                id=session_id,
+                workspace_id=workspace.id,
+                started_at=now - timedelta(hours=3),
+                ended_at=now - timedelta(minutes=5) if ended else None,
+            )
+        )
+        memory = Memory(
+            id=f"w-{session_id}",
+            workspace_id=workspace.id,
+            scope="session",
+            scope_id=session_id,
+            type="working",
+            content=f"会话 {session_id} 的工作记忆",
+            status="active",
+        )
+        db_session.add(memory)
+        db_session.flush()
+        memory.last_reinforced_at = (
+            now - timedelta(minutes=45) if session_id != "s-active" else now
+        )
+        db_session.flush()
+
+    _session("s-closed", ended=True)
+    _session("s-idle", ended=False)
+    _session("s-active", ended=False)
+
+    assert set(find_sessions_to_consolidate(db_session, now=now)) == {
+        "s-closed",
+        "s-idle",
+    }

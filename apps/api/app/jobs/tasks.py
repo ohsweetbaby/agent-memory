@@ -55,6 +55,9 @@ TASK_PROJECT_QDRANT = "app.jobs.tasks.project_qdrant"
 TASK_PROJECT_NEO4J = "app.jobs.tasks.project_neo4j"
 TASK_HEAL_PROJECTION_IDENTITY = "app.jobs.tasks.heal_projection_identity"
 TASK_EXTRACT_CONVERSATION = "app.jobs.tasks.extract_conversation"
+TASK_CONSOLIDATE_SESSION = "app.jobs.tasks.consolidate_session"
+TASK_CONSOLIDATE_NIGHTLY = "app.jobs.tasks.consolidate_nightly"
+TASK_CONSOLIDATE_IDLE = "app.jobs.tasks.consolidate_idle_sessions"
 
 NEO4J_TARGET = "neo4j"
 
@@ -81,6 +84,9 @@ _EXTRACT_OPTIONS: dict[str, Any] = {
     "retry_jitter": True,
     "time_limit": 600,
 }
+
+#: 巩固任务与抽取同样最多重试 3 次、超时 10 分钟。
+_CONSOLIDATE_OPTIONS: dict[str, Any] = dict(_EXTRACT_OPTIONS)
 
 
 def enqueue(task_name: str, *args: Any) -> None:
@@ -684,7 +690,94 @@ def extract_conversation(self: Any, job_id: str) -> dict[str, Any] | None:
         _retry_or_reraise(self, exc)
 
 
+@celery_app.task(bind=True, name=TASK_CONSOLIDATE_SESSION, **_CONSOLIDATE_OPTIONS)
+def consolidate_session(self: Any, session_id: str) -> dict[str, Any] | None:
+    """会话结束/空闲触发的巩固任务；失败保留 job_run.error 并可重试。"""
+    from app.services import consolidation as service
+
+    runtime = get_runtime()
+    try:
+        with runtime.session_scope() as db:
+            return service.consolidate_session(db, session_id).to_dict()
+    except Retry:
+        raise
+    except Exception as exc:
+        try:
+            with runtime.session_scope() as db:
+                job_id = service.session_job_id(db, session_id)
+                if job_id is not None:
+                    service.mark_job_failed(db, job_id, exc)
+        except Exception:  # 标记失败不能掩盖原始错误
+            logger.exception("failed to mark consolidation job failed")
+        _retry_or_reraise(self, exc)
+
+
+@celery_app.task(bind=True, name=TASK_CONSOLIDATE_NIGHTLY, **_CONSOLIDATE_OPTIONS)
+def consolidate_nightly(
+    self: Any,
+    window_start: str | None = None,
+    window_end: str | None = None,
+    scope: str | None = None,
+) -> dict[str, Any] | None:
+    """beat 每日 03:00 触发；默认窗口为过去 24 小时。"""
+    from datetime import datetime, timedelta
+
+    from app.models.base import utcnow
+    from app.services import consolidation as service
+
+    end = datetime.fromisoformat(window_end) if window_end else utcnow()
+    start = (
+        datetime.fromisoformat(window_start)
+        if window_start
+        else end - timedelta(hours=24)
+    )
+    runtime = get_runtime()
+    try:
+        with runtime.session_scope() as db:
+            return service.consolidate_nightly(
+                db, start, end, scope=scope
+            ).to_dict()
+    except Retry:
+        raise
+    except Exception as exc:
+        try:
+            with runtime.session_scope() as db:
+                job_id = service.job_id_for(
+                    service.JOB_TYPE_CONSOLIDATE_NIGHTLY,
+                    start,
+                    end,
+                    scope or "all",
+                )
+                service.mark_job_failed(db, job_id, exc)
+        except Exception:  # 标记失败不能掩盖原始错误
+            logger.exception("failed to mark consolidation job failed")
+        _retry_or_reraise(self, exc)
+
+
+@celery_app.task(bind=True, name=TASK_CONSOLIDATE_IDLE, **_CONSOLIDATE_OPTIONS)
+def consolidate_idle_sessions(self: Any, limit: int = 50) -> int:
+    """扫描已结束或空闲 ≥ 30 分钟的会话，逐个投递会话巩固。"""
+    from app.services import consolidation as service
+
+    runtime = get_runtime()
+    processed = 0
+    try:
+        with runtime.session_scope() as db:
+            session_ids = service.find_sessions_to_consolidate(db, limit=limit)
+            for session_id in session_ids:
+                enqueue(TASK_CONSOLIDATE_SESSION, session_id)
+                processed += 1
+        return processed
+    except Retry:
+        raise
+    except Exception as exc:
+        _retry_or_reraise(self, exc)
+
+
 __all__ = [
+    "consolidate_idle_sessions",
+    "consolidate_nightly",
+    "consolidate_session",
     "dispatch_outbox",
     "embed_memory",
     "enqueue",
