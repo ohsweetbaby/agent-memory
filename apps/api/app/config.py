@@ -58,6 +58,10 @@ class Settings(BaseSettings):
     llm_model: str = "gpt-4o-mini"
     llm_api_key: str = Field(default="", repr=False)
 
+    # 检索：M1 默认关闭查询改写；上下文预算与规格 §6.3 保持一致。
+    search_query_rewrite: bool = False
+    search_context_budget_tokens: int = Field(default=1500, ge=0)
+
     @property
     def is_development(self) -> bool:
         """开发环境才允许跨域访问。"""

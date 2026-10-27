@@ -20,6 +20,7 @@ dependencies = [
     "redis>=5,<7",
     "qdrant-client>=1.12,<1.13",
     "neo4j>=5.26,<6",
+    "jieba>=0.42.1",
 ]
 
 [project.optional-dependencies]
