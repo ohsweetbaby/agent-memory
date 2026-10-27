@@ -1,0 +1,474 @@
+"""记忆 REST 资源：写入、浏览、更新、置顶、合并、反馈与删除。
+
+写入路径统一走 :func:`app.services.memory_write.write_memory`，保证
+``memory + audit_log + outbox_event`` 同事务；本模块只负责认证、作用域校验
+与响应组装。
+"""
+
+from __future__ import annotations
+
+from datetime import datetime
+from typing import Any
+
+from fastapi import APIRouter, Depends, Query, Response
+from pydantic import BaseModel, Field
+from sqlalchemy import delete as sa_delete
+from sqlalchemy import select, update as sa_update
+from sqlalchemy.orm import Session
+
+from memory_core.types import Scope
+
+from app.api.deps import (
+    DEFAULT_PAGE_SIZE,
+    audit_actor,
+    ensure_workspace,
+    paginate,
+    resolve_workspace_id,
+    workspace_filter,
+)
+from app.auth.session import AuthContext, require_auth, require_scope
+from app.db import get_db
+from app.errors import BadRequestError, ForbiddenError, NotFoundError
+from app.models import Memory, MemoryLink
+from app.models.base import utcnow
+from app.repositories.memory import MemoryRepository
+from app.repositories.outbox import OutboxRepository
+from app.schemas.memory import MemoryWriteRequest, normalize_content
+from app.services.audit import write_audit
+from app.services.encoding import detect_pii
+from app.services.memory_write import (
+    emit_memory_event,
+    feedback_memory,
+    get_conflict_judge,
+    write_memory,
+)
+
+router = APIRouter(prefix="/api/v1/memories", tags=["memories"])
+
+MAX_HISTORY_ITEMS = 20
+
+
+class MemoryPatch(BaseModel):
+    content: str | None = None
+    importance: float | None = Field(default=None, ge=0.0, le=1.0)
+    summary: str | None = None
+    tags: list[str] | None = None
+    valid_to: datetime | None = None
+
+
+class FeedbackRequest(BaseModel):
+    helpful: bool
+    reason: str | None = Field(default=None, max_length=2000)
+
+
+class MergeRequest(BaseModel):
+    source_ids: list[str] = Field(min_length=1)
+    target_id: str
+
+
+def require_write(context: AuthContext = Depends(require_auth)) -> AuthContext:
+    """写操作要求 write scope；错误码与读 Key 的 403 区分开。"""
+    if not context.has_scope("write"):
+        raise ForbiddenError("需要 write 权限", code="insufficient_scope")
+    return context
+
+
+def _load_memory(session: Session, context: AuthContext, memory_id: str) -> Memory:
+    """按认证主体读取记忆；软删与跨 workspace 统一 404。"""
+    if context.workspace_id is not None:
+        memory = MemoryRepository(session).get(context.workspace_id, memory_id)
+    else:
+        # 单管理员会话可跨工作区管理（T8 裁决）；API Key 始终走上面的分支。
+        memory = session.get(Memory, memory_id)
+    if memory is None or memory.status == "deleted" or memory.deleted_at is not None:
+        raise NotFoundError("记忆不存在")
+    return memory
+
+
+def _memory_payload(memory: Memory) -> dict[str, Any]:
+    return {
+        "id": memory.id,
+        "workspace_id": memory.workspace_id,
+        "scope": memory.scope,
+        "scope_id": memory.scope_id,
+        "type": memory.type,
+        "content": memory.content,
+        "summary": memory.summary,
+        "importance": memory.importance,
+        "confidence": memory.confidence,
+        "stability": memory.stability,
+        "access_count": memory.access_count,
+        "version": memory.version,
+        "status": memory.status,
+        "superseded_by": memory.superseded_by,
+        "valid_from": memory.valid_from,
+        "valid_to": memory.valid_to,
+        "source_type": memory.source_type,
+        "source_id": memory.source_id,
+        "metadata": memory.metadata_ or {},
+        "created_at": memory.created_at,
+        "updated_at": memory.updated_at,
+        "deleted_at": memory.deleted_at,
+    }
+
+
+def _audit_snapshot(memory: Memory) -> dict[str, Any]:
+    return {
+        "content": memory.content,
+        "summary": memory.summary,
+        "importance": memory.importance,
+        "status": memory.status,
+        "version": memory.version,
+        "valid_to": memory.valid_to.isoformat() if memory.valid_to else None,
+        "metadata": memory.metadata_ or {},
+    }
+
+
+@router.get("")
+def list_memories(
+    workspace_id: str | None = Query(default=None, max_length=36),
+    memory_type: str | None = Query(default=None, alias="type"),
+    scope: str | None = Query(default=None),
+    status: str | None = Query(default=None),
+    min_importance: float | None = Query(default=None, ge=0.0, le=1.0),
+    q: str | None = Query(default=None, max_length=500),
+    limit: int = Query(default=DEFAULT_PAGE_SIZE),
+    cursor: str | None = Query(default=None),
+    context: AuthContext = Depends(require_scope("read")),
+    session: Session = Depends(get_db),
+) -> dict[str, Any]:
+    resolved = workspace_filter(context, workspace_id)
+    statement = select(Memory)
+    if resolved is not None:
+        ensure_workspace(session, context, resolved)
+        statement = statement.where(Memory.workspace_id == resolved)
+    statement = statement.where(Memory.status != "deleted", Memory.deleted_at.is_(None))
+    if memory_type is not None:
+        statement = statement.where(Memory.type == memory_type)
+    if scope is not None:
+        statement = statement.where(Memory.scope == scope)
+    if status is not None:
+        statement = statement.where(Memory.status == status)
+    if min_importance is not None:
+        statement = statement.where(Memory.importance >= min_importance)
+    if q and q.strip():
+        statement = statement.where(Memory.content.ilike(f"%{q.strip()}%"))
+
+    items, next_cursor = paginate(
+        session, statement, Memory, limit=limit, cursor=cursor
+    )
+    return {
+        "items": [_memory_payload(item) for item in items],
+        "next_cursor": next_cursor,
+    }
+
+
+@router.post("", status_code=201)
+def create_memory(
+    payload: MemoryWriteRequest,
+    context: AuthContext = Depends(require_write),
+    session: Session = Depends(get_db),
+    judge=Depends(get_conflict_judge),
+) -> dict[str, Any]:
+    resolved = resolve_workspace_id(context, payload.workspace_id)
+    ensure_workspace(session, context, resolved)
+    if payload.scope == Scope.GLOBAL and not context.has_scope("admin"):
+        raise ForbiddenError(
+            "global 作用域仅 admin key 可写", code="insufficient_scope"
+        )
+
+    request = payload.model_copy(update={"workspace_id": resolved})
+    result = write_memory(session, request, context, judge=judge)
+    memory = session.get(Memory, result.id)
+    if memory is None:  # pragma: no cover - 同事务刚写入，防御性分支
+        raise NotFoundError("记忆不存在")
+    body = _memory_payload(memory)
+    body["action"] = result.action
+    body["superseded_ids"] = list(result.superseded_ids)
+    return body
+
+
+@router.post("/merge")
+def merge_memories(
+    payload: MergeRequest,
+    context: AuthContext = Depends(require_write),
+    session: Session = Depends(get_db),
+) -> dict[str, Any]:
+    target = _load_memory(session, context, payload.target_id)
+    if target.id in payload.source_ids:
+        raise BadRequestError("target 不能同时作为 source", code="invalid_merge")
+    if len(set(payload.source_ids)) != len(payload.source_ids):
+        raise BadRequestError("source_ids 不能重复", code="invalid_merge")
+
+    sources = [
+        _load_memory(session, context, source_id)
+        for source_id in payload.source_ids
+    ]
+    for source in sources:
+        if source.workspace_id != target.workspace_id:
+            raise NotFoundError("记忆不存在")
+
+    actor_type, actor_id = audit_actor(context)
+    repo = MemoryRepository(session)
+    target_before = _audit_snapshot(target)
+    target_metadata = dict(target.metadata_ or {})
+    evidence = list(target_metadata.get("merge_evidence", []))
+    access_count = target.access_count
+    merged_ids: list[str] = []
+
+    for source in sources:
+        source_metadata = dict(source.metadata_ or {})
+        source_metadata["merged_into"] = target.id
+        source_before = _audit_snapshot(source)
+        repo.update(source, status="archived", metadata=source_metadata)
+        write_audit(
+            session,
+            action="memory.merged",
+            target_type="memory",
+            target_id=source.id,
+            workspace_id=source.workspace_id,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            before=source_before,
+            after={"merged_into": target.id},
+        )
+        emit_memory_event(session, source, "merged")
+
+        # 把 source 的关联迁移到 target；迁移后清理自环。
+        session.execute(
+            sa_update(MemoryLink)
+            .where(MemoryLink.from_id == source.id)
+            .values(from_id=target.id)
+        )
+        session.execute(
+            sa_update(MemoryLink)
+            .where(MemoryLink.to_id == source.id)
+            .values(to_id=target.id)
+        )
+        session.execute(
+            sa_delete(MemoryLink).where(MemoryLink.from_id == MemoryLink.to_id)
+        )
+
+        access_count += source.access_count
+        evidence.append(
+            {
+                "source_id": source.id,
+                "content": source.content,
+                "at": utcnow().isoformat(),
+            }
+        )
+        merged_ids.append(source.id)
+
+    target_metadata["merge_evidence"] = evidence[-MAX_HISTORY_ITEMS:]
+    previous_merged = set(target_metadata.get("merged_sources", []))
+    previous_merged.update(merged_ids)
+    target_metadata["merged_sources"] = sorted(previous_merged)
+    repo.update(target, access_count=access_count, metadata=target_metadata)
+    write_audit(
+        session,
+        action="memory.merged",
+        target_type="memory",
+        target_id=target.id,
+        workspace_id=target.workspace_id,
+        actor_type=actor_type,
+        actor_id=actor_id,
+        before=target_before,
+        after={
+            **_audit_snapshot(target),
+            "merged_sources": merged_ids,
+        },
+    )
+    emit_memory_event(session, target, "merged")
+    session.commit()
+    return _memory_payload(target)
+
+
+@router.get("/{memory_id}")
+def get_memory(
+    memory_id: str,
+    context: AuthContext = Depends(require_scope("read")),
+    session: Session = Depends(get_db),
+) -> dict[str, Any]:
+    return _memory_payload(_load_memory(session, context, memory_id))
+
+
+@router.patch("/{memory_id}")
+def patch_memory(
+    memory_id: str,
+    payload: MemoryPatch,
+    context: AuthContext = Depends(require_write),
+    session: Session = Depends(get_db),
+) -> dict[str, Any]:
+    memory = _load_memory(session, context, memory_id)
+    fields = payload.model_fields_set
+    if not fields:
+        raise BadRequestError("没有可更新的字段", code="empty_patch")
+
+    before = _audit_snapshot(memory)
+    metadata = dict(memory.metadata_ or {})
+    metadata_dirty = False
+    updates: dict[str, Any] = {}
+
+    if "content" in fields and payload.content is not None:
+        content = normalize_content(payload.content)
+        updates["content"] = content
+        pii_types = detect_pii(content)
+        if pii_types:
+            metadata["pii"] = True
+            metadata["pii_types"] = pii_types
+            metadata["pii_fields"] = ["content"]
+        else:
+            for key in ("pii", "pii_types", "pii_fields"):
+                metadata.pop(key, None)
+        metadata_dirty = True
+
+    if "summary" in fields:
+        updates["summary"] = payload.summary
+    if "importance" in fields and payload.importance is not None:
+        updates["importance"] = payload.importance
+    if "valid_to" in fields:
+        updates["valid_to"] = payload.valid_to
+    if "tags" in fields:
+        metadata["tags"] = list(payload.tags or [])
+        metadata_dirty = True
+
+    if metadata_dirty:
+        updates["metadata"] = metadata
+    if not updates:
+        raise BadRequestError("没有可更新的字段", code="empty_patch")
+
+    MemoryRepository(session).update(memory, **updates)
+    actor_type, actor_id = audit_actor(context)
+    write_audit(
+        session,
+        action="memory.updated",
+        target_type="memory",
+        target_id=memory.id,
+        workspace_id=memory.workspace_id,
+        actor_type=actor_type,
+        actor_id=actor_id,
+        before=before,
+        after=_audit_snapshot(memory),
+    )
+    emit_memory_event(session, memory, "updated")
+    session.commit()
+    return _memory_payload(memory)
+
+
+@router.delete("/{memory_id}")
+def delete_memory(
+    memory_id: str,
+    hard: bool = Query(default=False),
+    confirm: bool = Query(default=False),
+    context: AuthContext = Depends(require_write),
+    session: Session = Depends(get_db),
+):
+    memory = _load_memory(session, context, memory_id)
+    actor_type, actor_id = audit_actor(context)
+    before = _audit_snapshot(memory)
+    version = memory.version
+
+    if hard:
+        if not confirm:
+            raise BadRequestError(
+                "硬删除需要 confirm=true", code="confirmation_required"
+            )
+        if not context.has_scope("admin"):
+            raise ForbiddenError("硬删除需要 admin 权限", code="insufficient_scope")
+        memory_id_value = memory.id
+        workspace_id = memory.workspace_id
+        session.delete(memory)
+        session.flush()
+        write_audit(
+            session,
+            action="memory.deleted",
+            target_type="memory",
+            target_id=memory_id_value,
+            workspace_id=workspace_id,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            before=before,
+            after={"hard": True},
+        )
+        OutboxRepository(session).add(
+            "memory.deleted",
+            memory_id_value,
+            {
+                "memory_id": memory_id_value,
+                "version": version,
+                "workspace_id": workspace_id,
+                "action": "deleted",
+                "hard": True,
+            },
+        )
+        session.commit()
+        return {"id": memory_id_value, "deleted": True, "hard": True}
+
+    MemoryRepository(session).update(
+        memory, status="deleted", deleted_at=utcnow()
+    )
+    write_audit(
+        session,
+        action="memory.deleted",
+        target_type="memory",
+        target_id=memory.id,
+        workspace_id=memory.workspace_id,
+        actor_type=actor_type,
+        actor_id=actor_id,
+        before=before,
+        after=_audit_snapshot(memory),
+    )
+    emit_memory_event(session, memory, "deleted", deleted=True)
+    session.commit()
+    return Response(status_code=204)
+
+
+@router.post("/{memory_id}/pin")
+def pin_memory(
+    memory_id: str,
+    context: AuthContext = Depends(require_write),
+    session: Session = Depends(get_db),
+) -> dict[str, Any]:
+    memory = _load_memory(session, context, memory_id)
+    before = _audit_snapshot(memory)
+    metadata = dict(memory.metadata_ or {})
+    metadata["pinned"] = True
+    MemoryRepository(session).update(
+        memory, importance=1.0, metadata=metadata
+    )
+    actor_type, actor_id = audit_actor(context)
+    write_audit(
+        session,
+        action="memory.pinned",
+        target_type="memory",
+        target_id=memory.id,
+        workspace_id=memory.workspace_id,
+        actor_type=actor_type,
+        actor_id=actor_id,
+        before=before,
+        after=_audit_snapshot(memory),
+    )
+    emit_memory_event(session, memory, "pinned")
+    session.commit()
+    return _memory_payload(memory)
+
+
+@router.post("/{memory_id}/feedback")
+def memory_feedback(
+    memory_id: str,
+    payload: FeedbackRequest,
+    context: AuthContext = Depends(require_write),
+    session: Session = Depends(get_db),
+) -> dict[str, Any]:
+    memory = _load_memory(session, context, memory_id)
+    feedback_memory(
+        session,
+        memory,
+        helpful=payload.helpful,
+        reason=payload.reason,
+        actor=context,
+    )
+    return _memory_payload(memory)
+
+
+__all__ = ["router"]

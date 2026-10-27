@@ -54,6 +54,14 @@ class Memory(Base, TimestampMixin):
             postgresql_using="gin",
             postgresql_ops={"metadata": "jsonb_path_ops"},
         ),
+        # 幂等写入：只约束非空 key，历史行与未指定 key 的写入不受影响。
+        Index(
+            "uq_memory_workspace_idempotency_key",
+            "workspace_id",
+            "idempotency_key",
+            unique=True,
+            postgresql_where=text("idempotency_key IS NOT NULL"),
+        ),
         CheckConstraint(
             "scope IN ('global', 'agent', 'user', 'session')",
             name="ck_memory_scope",
@@ -75,6 +83,7 @@ class Memory(Base, TimestampMixin):
 
     content: Mapped[str] = mapped_column(Text, nullable=False)
     summary: Mapped[str | None] = mapped_column(Text)
+    idempotency_key: Mapped[str | None] = mapped_column(String(255))
 
     importance: Mapped[float] = mapped_column(Float, nullable=False, default=0.5)
     confidence: Mapped[float] = mapped_column(Float, nullable=False, default=0.5)

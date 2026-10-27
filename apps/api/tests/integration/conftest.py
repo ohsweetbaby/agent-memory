@@ -15,6 +15,7 @@ os.environ.setdefault("TESTCONTAINERS_RYUK_DISABLED", "true")
 
 from collections.abc import Callable, Iterator  # noqa: E402
 from pathlib import Path  # noqa: E402
+from types import SimpleNamespace  # noqa: E402
 from typing import Any  # noqa: E402
 from uuid import uuid4  # noqa: E402
 
@@ -228,6 +229,46 @@ def read_key(client, workspace: dict[str, Any]) -> dict[str, Any]:
     )
     assert response.status_code == 201, response.text
     return response.json()
+
+
+@pytest.fixture()
+def write_key(client, workspace: dict[str, Any]) -> str:
+    """仅有 write（无 admin）的 API Key，用于作用域边界测试。"""
+    response = client.post(
+        "/api/v1/keys",
+        json={"workspace_id": workspace["id"], "name": "writer", "scopes": ["write"]},
+    )
+    assert response.status_code == 201, response.text
+    return response.json()["key"]
+
+
+@pytest.fixture()
+def valid_write_payload(workspace: dict[str, Any]) -> Callable[..., dict[str, Any]]:
+    """构造合法写入载荷；用例只覆盖需要变化的字段。"""
+
+    def _make(**overrides: Any) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "workspace_id": workspace["id"],
+            "content": "默认记忆内容",
+            "type": "semantic",
+            "scope": "user",
+            "scope_id": "user-1",
+        }
+        payload.update(overrides)
+        return payload
+
+    return _make
+
+
+@pytest.fixture()
+def memory(client, admin, valid_write_payload: Callable[..., dict[str, Any]]):
+    """通过公开 API 创建一条记忆，返回带 ``id`` 的轻量对象。"""
+    response = client.post(
+        "/api/v1/memories", json=valid_write_payload(content="用户喜欢喝绿茶")
+    )
+    assert response.status_code == 201, response.text
+    body = response.json()
+    return SimpleNamespace(**body)
 
 
 @pytest.fixture()

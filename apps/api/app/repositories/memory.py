@@ -57,6 +57,25 @@ def _scope_value(scope: str | Enum) -> str:
     return scope.value if isinstance(scope, Enum) else str(scope)
 
 
+def _scope_conditions(scope_pairs: Sequence[tuple[str | Enum, str | None]]) -> list[Any]:
+    """把 (scope, scope_id) 列表转成 SQL 条件；空 scope_id 视为 NULL。"""
+    conditions = []
+    for scope, scope_id in scope_pairs:
+        normalized = _scope_value(scope)
+        if scope_id is None or not str(scope_id).strip():
+            conditions.append(
+                and_(Memory.scope == normalized, Memory.scope_id.is_(None))
+            )
+        else:
+            conditions.append(
+                and_(
+                    Memory.scope == normalized,
+                    Memory.scope_id == str(scope_id),
+                )
+            )
+    return conditions
+
+
 class MemoryRepository:
     """``memory`` 表的读写入口；调用方负责提交事务。"""
 
@@ -69,10 +88,31 @@ class MemoryRepository:
         return memory
 
     def get(self, workspace_id: str, memory_id: str) -> Memory | None:
-        """按 (workspace, id) 精确读取；跨 workspace 一律返回 None。"""
+        """按 (workspace, id) 精确读取；跨 workspace 一律返回 None。
+
+        软删除行仍会被返回；API 层必须自行排除 ``status=deleted``。这样
+        后台清理/审计任务仍能按 id 读取已删除记录。
+        """
         stmt = select(Memory).where(
             Memory.workspace_id == workspace_id,
             Memory.id == memory_id,
+        )
+        return self.session.scalar(stmt)
+
+    def get_by_idempotency_key(
+        self, workspace_id: str, idempotency_key: str
+    ) -> Memory | None:
+        """按 (workspace, idempotency_key) 读取；用于并发写入的幂等回查。
+
+        合并到已有记忆时，键可能以别名形式保存在 ``metadata.idempotency_aliases``
+        中；这里一并匹配，保证重试不会再次合并。
+        """
+        stmt = select(Memory).where(
+            Memory.workspace_id == workspace_id,
+            or_(
+                Memory.idempotency_key == idempotency_key,
+                Memory.metadata_["idempotency_aliases"].contains([idempotency_key]),
+            ),
         )
         return self.session.scalar(stmt)
 
@@ -129,20 +169,7 @@ class MemoryRepository:
         if not scope_pairs or not content or not content.strip():
             return []
 
-        scope_conditions = []
-        for scope, scope_id in scope_pairs:
-            normalized = _scope_value(scope)
-            if scope_id is None or not str(scope_id).strip():
-                scope_conditions.append(
-                    and_(Memory.scope == normalized, Memory.scope_id.is_(None))
-                )
-            else:
-                scope_conditions.append(
-                    and_(
-                        Memory.scope == normalized,
-                        Memory.scope_id == str(scope_id),
-                    )
-                )
+        scope_conditions = _scope_conditions(scope_pairs)
         if not scope_conditions:
             return []
 
@@ -162,3 +189,33 @@ class MemoryRepository:
         )
         rows = self.session.execute(stmt).all()
         return [(row[0], float(row[1])) for row in rows]
+
+    def find_active(
+        self,
+        workspace_id: str,
+        scope_pairs: Sequence[tuple[str | Enum, str | None]],
+        memory_type: str,
+        limit: int = 5,
+    ) -> list[Memory]:
+        """同 workspace/scope/type 的当前有效记忆，按最近强化排序。
+
+        用于语义矛盾判定：当词面相似度为 0（例如“北京”→“上海”）时，
+        pg_trgm 无法召回候选，但 judge 仍需要看到同作用域的近期事实。
+        """
+        scope_conditions = _scope_conditions(scope_pairs)
+        if not scope_conditions or limit <= 0:
+            return []
+        stmt = (
+            select(Memory)
+            .where(
+                Memory.workspace_id == workspace_id,
+                or_(*scope_conditions),
+                Memory.type == memory_type,
+                Memory.status == "active",
+                Memory.deleted_at.is_(None),
+                or_(Memory.valid_to.is_(None), Memory.valid_to > func.now()),
+            )
+            .order_by(Memory.last_reinforced_at.desc(), Memory.id.desc())
+            .limit(limit)
+        )
+        return list(self.session.scalars(stmt))
