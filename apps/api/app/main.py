@@ -3,22 +3,39 @@
 from __future__ import annotations
 
 import socket
+from collections.abc import AsyncIterator
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import asynccontextmanager
 from typing import Any
 from urllib.parse import urlsplit
 
 import httpx
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, generate_latest
+from starlette.types import Receive, Scope, Send
 
 from app.api import ROUTERS
 from app.config import Settings, get_current_settings, set_current_settings
 from app.errors import install_error_handlers
 from app.logging import configure_logging
+from app.mcp.services import BearerTokenMiddleware
+
+try:  # MCP 是可选能力：SDK 未安装时 API 仍然要能启动。
+    from app.mcp.server import build_mcp_server, default_mcp_services
+except ModuleNotFoundError as _mcp_import_error:  # pragma: no cover - 环境相关
+    if (_mcp_import_error.name or "").split(".")[0] != "mcp":
+        raise
+    build_mcp_server = None  # type: ignore[assignment]
+    default_mcp_services = None  # type: ignore[assignment]
+    MCP_IMPORT_ERROR: str | None = str(_mcp_import_error)
+else:
+    MCP_IMPORT_ERROR = None
 
 APP_VERSION = "0.1.0"
 CHECK_TIMEOUT_SECONDS = 0.5
+MCP_PATH = "/mcp"
 
 REQUEST_COUNT = Counter(
     "http_requests",
@@ -103,28 +120,125 @@ def collect_health() -> dict[str, Any]:
     return {"status": status, "components": components}
 
 
+class _UnavailableMcpApp:
+    """MCP SDK 未安装时的占位 ASGI 应用：返回可读的 503。"""
+
+    def __init__(self, reason: str | None) -> None:
+        self.reason = reason or "未安装 mcp 包"
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            return
+        response = JSONResponse(
+            status_code=503,
+            content={
+                "error": {
+                    "code": "mcp_unavailable",
+                    "message": f"MCP 依赖不可用：{self.reason}；请执行 uv sync 安装官方 SDK",
+                    "details": None,
+                }
+            },
+        )
+        await response(scope, receive, send)
+
+
+class _McpGateway:
+    """按 lifespan 重建 Streamable HTTP 会话管理器。
+
+    FastMCP 的 ``StreamableHTTPSessionManager.run()`` 每个实例只能执行一次。
+    Starlette 不会自动运行挂载子应用的 lifespan，而同一应用在测试（并发
+    客户端、多个 TestClient 上下文）或热重载时可能多次进入 lifespan，因此
+    这里每次启动都新建一个子应用并在请求期转发。
+    """
+
+    def __init__(self, server: Any) -> None:
+        self.server = server
+        self._inner: Any | None = None
+
+    @asynccontextmanager
+    async def session(self) -> AsyncIterator[None]:
+        # 重置私有缓存；_mcp_server 与注册的工具/资源保持不变。
+        self.server._session_manager = None  # noqa: SLF001
+        app = self.server.streamable_http_app()
+        self._inner = app
+        try:
+            async with app.router.lifespan_context(app):
+                yield
+        finally:
+            if self._inner is app:
+                self._inner = None
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if self._inner is None:  # pragma: no cover - lifespan 未启动
+            response = JSONResponse(
+                status_code=503,
+                content={
+                    "error": {
+                        "code": "mcp_unavailable",
+                        "message": "MCP 服务尚未启动",
+                        "details": None,
+                    }
+                },
+            )
+            await response(scope, receive, send)
+            return
+        await self._inner(scope, receive, send)
+
+
 def _route_label(request: Request) -> str:
     """优先使用路由模板，避免把 ID 写进指标标签。"""
     route = request.scope.get("route")
     return getattr(route, "path", None) or request.url.path
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
-    """创建 API 应用。"""
+def create_app(
+    settings: Settings | None = None,
+    *,
+    mcp_services: Any | None = None,
+) -> FastAPI:
+    """创建 API 应用。
+
+    ``mcp_services`` 仅用于测试注入数据库会话与检索替身；生产环境按配置惰性
+    构建。MCP 通过 ``/mcp`` 挂载 Streamable HTTP，lifespan 与主应用合并。
+    """
     resolved = settings or Settings()
     set_current_settings(resolved)
     configure_logging(resolved.log_level)
+
+    mcp_gateway: _McpGateway | None = None
+    mcp_unavailable = False
+    if resolved.mcp_enabled:
+        if build_mcp_server is None:  # pragma: no cover - 依赖缺失分支
+            mcp_unavailable = True
+        else:
+            services = mcp_services or default_mcp_services(resolved)
+            mcp_gateway = _McpGateway(build_mcp_server(services))
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        if mcp_gateway is None:
+            yield
+            return
+        # 挂载的子应用不会自动执行 lifespan；MCP session manager 依赖它。
+        async with mcp_gateway.session():
+            yield
 
     application = FastAPI(
         title="Agent Memory API",
         version=APP_VERSION,
         docs_url="/docs" if resolved.is_development else None,
         redoc_url=None,
+        lifespan=lifespan,
     )
 
     install_error_handlers(application)
     for router in ROUTERS:
         application.include_router(router)
+
+    if mcp_gateway is not None:
+        application.mount(MCP_PATH, BearerTokenMiddleware(mcp_gateway))
+    elif mcp_unavailable:  # pragma: no cover - 依赖缺失分支
+        application.mount(MCP_PATH, _UnavailableMcpApp(MCP_IMPORT_ERROR))
 
     if resolved.is_development:
         application.add_middleware(

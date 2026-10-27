@@ -3,17 +3,18 @@ name = "agent-memory"
 version = "0.1.0"
 description = "可本地自托管的通用智能体记忆系统"
 requires-python = ">=3.12,<3.13"
-dependencies = ["agent-memory-api", "agent-memory-core"]
+dependencies = ["agent-memory-api", "agent-memory-core", "memory-mcp"]
 
 [tool.uv]
 package = false
 
 [tool.uv.workspace]
-members = ["apps/api", "packages/memory-core"]
+members = ["apps/api", "packages/memory-core", "packages/mcp-stdio"]
 
 [tool.uv.sources]
 agent-memory-api = { workspace = true }
 agent-memory-core = { workspace = true }
+memory-mcp = { workspace = true }
 
 [dependency-groups]
 dev = [
@@ -22,7 +23,7 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["apps/api/tests", "packages/memory-core/tests"]
+testpaths = ["apps/api/tests", "packages/memory-core/tests", "packages/mcp-stdio/tests"]
 addopts = "-ra"
 markers = [
     "integration: 需要 Docker 的集成测试",

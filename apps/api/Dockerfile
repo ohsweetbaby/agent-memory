@@ -18,6 +18,9 @@ WORKDIR /app
 COPY pyproject.toml uv.lock ./
 COPY apps/api/pyproject.toml apps/api/pyproject.toml
 COPY apps/api/app apps/api/app
+# stdio 薄桥与 API 同属 uv workspace；manifest 缺失会让 workspace 解析失败。
+COPY packages/mcp-stdio/pyproject.toml packages/mcp-stdio/pyproject.toml
+COPY packages/mcp-stdio/memory_mcp packages/mcp-stdio/memory_mcp
 
 RUN uv sync --frozen --no-dev --package agent-memory-api
 

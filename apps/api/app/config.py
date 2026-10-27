@@ -49,6 +49,13 @@ class Settings(BaseSettings):
     api_key_read_rpm: int = 120
     api_key_write_rpm: int = 30
 
+    # MCP：默认启用；未安装官方 SDK 时 /mcp 返回 503，REST 仍可正常启动。
+    mcp_enabled: bool = True
+    # 反向代理部署时 Host/Origin 由 Nginx 转发，默认不做 DNS rebinding 校验；
+    # 直接暴露时可配置逗号分隔的白名单（如 ``mcp.example.com``）重新开启。
+    mcp_allowed_hosts: str = ""
+    mcp_allowed_origins: str = ""
+
     # 模型服务
     embedding_provider: str = "openai"
     embedding_model: str = "text-embedding-3-small"
