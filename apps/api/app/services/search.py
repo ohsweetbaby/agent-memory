@@ -418,8 +418,9 @@ def _prior_sync(
     for memory in rows:
         current = _memory_retention(memory, now)
         if mode == "recent":
-            # 时近性权重更高：保留率按平方根衰减，近期记忆的相对优势更明显。
-            prior = float(memory.importance or 0.0) * (current**0.5)
+            # 时近性权重更高：对保留率平方会放大新旧的差距（R∈(0,1]），
+            # 避免用平方根把旧记忆的相对分数抬高。
+            prior = float(memory.importance or 0.0) * (current**2)
         else:
             prior = float(memory.importance or 0.0) * current
         scored.append((memory, prior))

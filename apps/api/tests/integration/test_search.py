@@ -84,9 +84,11 @@ def _new_memory(
     memory_type: str = "semantic",
     metadata: dict[str, Any] | None = None,
     valid_to=None,
+    workspace_id: str = WORKSPACE_ID,
+    last_reinforced_at=None,
 ) -> Memory:
     memory = Memory(
-        workspace_id=WORKSPACE_ID,
+        workspace_id=workspace_id,
         scope=scope,
         scope_id=scope_id,
         type=memory_type,
@@ -100,7 +102,7 @@ def _new_memory(
         metadata_=dict(metadata or {"source_quote": "我吃花生会过敏"}),
         valid_from=utcnow() - timedelta(days=3),
         valid_to=valid_to,
-        last_reinforced_at=utcnow() - timedelta(days=1),
+        last_reinforced_at=last_reinforced_at or (utcnow() - timedelta(days=1)),
     )
     session.add(memory)
     session.flush()
@@ -273,6 +275,32 @@ def test_search_degrades_when_vector_channel_unavailable(
     assert r.json()["items"]
 
 
+def test_keyword_recalls_noncontiguous_chinese_when_vector_down(
+    client, admin, seeded_memories, monkeypatch
+) -> None:
+    """simple 分词下整段中文是单 token；非连续查询必须靠 token 级匹配召回。"""
+
+    def raise_connection_error(self, *args, **kwargs):
+        raise ConnectionError("qdrant unavailable")
+
+    monkeypatch.setattr(QdrantIndex, "search", raise_connection_error)
+    for query in ("花生 过敏", "花生过敏怎么办"):
+        r = client.post(
+            "/api/v1/search",
+            json={
+                "query": query,
+                "workspace_id": "ws1",
+                "end_user_id": "u1",
+            },
+        )
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert "vector" in body["degraded"]
+        assert body["items"]
+        assert body["items"][0]["content"] == TARGET_CONTENT
+        assert body["items"][0]["why"]["bm25_rank"] is not None
+
+
 def test_search_never_leaks_other_scope(client, admin, seeded_memories) -> None:
     r = client.post(
         "/api/v1/search",
@@ -347,3 +375,69 @@ def test_deep_mode_includes_archived_and_survives_rerank_failure(
     )
     assert item["historical"] is True
     assert item["status"] == "archived"
+
+
+RECENT_WORKSPACE = "ws-recent"
+
+
+def _seed_recent(
+    session_factory: sessionmaker[Session],
+    specs: list[tuple[str, float, int]],
+) -> None:
+    """在独立 workspace 写入 ``(content, importance, age_days)`` 记忆。"""
+    with session_factory() as session:
+        if session.get(Workspace, RECENT_WORKSPACE) is None:
+            session.add(Workspace(id=RECENT_WORKSPACE, name="近期检索"))
+            session.flush()
+        for content, importance, age_days in specs:
+            _new_memory(
+                session,
+                content=content,
+                importance=importance,
+                scope="global",
+                scope_id=None,
+                workspace_id=RECENT_WORKSPACE,
+                last_reinforced_at=utcnow() - timedelta(days=age_days),
+            )
+        session.commit()
+
+
+def _recent_items(client, limit: int = 8) -> list[dict[str, Any]]:
+    """查询与语料无关的词，确保排序只来自先验通道。"""
+    r = client.post(
+        "/api/v1/search",
+        json={
+            "query": "zzzz qqqq",
+            "workspace_id": RECENT_WORKSPACE,
+            "mode": "recent",
+            "limit": limit,
+        },
+    )
+    assert r.status_code == 200, r.text
+    return r.json()["items"]
+
+
+def test_recent_mode_ranks_newer_memory_first_with_equal_importance(
+    client, admin, session_factory: sessionmaker[Session]
+) -> None:
+    _seed_recent(
+        session_factory,
+        [("新的偏好设置", 0.5, 0), ("旧的偏好设置", 0.5, 20)],
+    )
+    contents = [item["content"] for item in _recent_items(client)]
+    assert contents[:2] == ["新的偏好设置", "旧的偏好设置"]
+
+
+def test_recent_prior_squares_retention_so_freshness_wins(
+    client, admin, session_factory: sessionmaker[Session]
+) -> None:
+    """R∈(0,1] 时平方放大新旧差距；用平方根会把更重要但更旧的条目排到前面。"""
+    _seed_recent(
+        session_factory,
+        [("更新但重要性略低", 0.44, 0), ("更旧但重要性略高", 0.5, 2)],
+    )
+    items = _recent_items(client)
+    assert [item["content"] for item in items][:2] == [
+        "更新但重要性略低",
+        "更旧但重要性略高",
+    ], [(i["content"], i["score"], i["why"]) for i in items]
