@@ -22,17 +22,21 @@ def make_item(
     confidence: float = 0.9,
     retention: float = 0.8,
     source_quote: str | None = None,
+    historical: bool = False,
+    score: float | None = None,
 ) -> ContextItem:
     return ContextItem(
-        item_id,
-        type,
-        content,
-        importance,
-        confidence,
-        retention,
-        NOW,
-        Scope.USER,
-        source_quote,
+        id=item_id,
+        type=type,
+        content=content,
+        importance=importance,
+        confidence=confidence,
+        retention=retention,
+        timestamp=NOW,
+        scope=Scope.USER,
+        source_quote=source_quote,
+        historical=historical,
+        score=score,
     )
 
 
@@ -113,9 +117,18 @@ def test_groups_follow_semantic_procedural_episodic_order():
 
 def test_historical_items_are_placed_last_regardless_of_score():
     archived = ContextItem(
-        "x", "semantic", "旧版本部署流程", 1.0, 0.9, 0.8, NOW, Scope.USER, historical=True
+        "x",
+        "semantic",
+        "旧版本部署流程",
+        1.0,
+        0.9,
+        0.8,
+        NOW,
+        Scope.USER,
+        historical=True,
+        score=10.0,
     )
-    episodic = make_item("e", "昨天部署失败", type="episodic", importance=0.1)
+    episodic = make_item("e", "昨天部署失败", type="episodic", importance=0.1, score=0.0)
     _, kept = assemble_context([archived, episodic])
     assert [item.id for item in kept] == ["e", "x"]
     text, _ = assemble_context([archived])
@@ -127,6 +140,43 @@ def test_items_in_same_group_are_sorted_by_score_descending():
     high = make_item("high", "用户喜欢爵士", importance=0.9)
     _, kept = assemble_context([low, high])
     assert [item.id for item in kept] == ["high", "low"]
+
+
+def test_explicit_score_overrides_proxy_priority():
+    high_score = make_item(
+        "high", "用户喜欢爵士", importance=0.1, confidence=0.1, retention=0.1, score=0.9
+    )
+    low_score = make_item(
+        "low", "用户喜欢摇滚", importance=0.99, confidence=0.99, retention=0.99, score=0.1
+    )
+    _, kept = assemble_context([low_score, high_score])
+    assert [item.id for item in kept] == ["high", "low"]
+
+
+def test_duplicate_keeps_higher_explicit_score():
+    proxy_high = make_item(
+        "a", "用户对花生过敏", importance=0.99, confidence=0.99, retention=0.99, score=0.1
+    )
+    score_high = make_item(
+        "b", "用户对花生严重过敏", importance=0.1, confidence=0.1, retention=0.1, score=0.9
+    )
+    _, kept = assemble_context([proxy_high, score_high])
+    assert [item.id for item in kept] == ["b"]
+
+
+def test_budget_keeps_priority_prefix_and_drops_only_tail():
+    items = [
+        make_item("high", "高" * 60, score=0.9),
+        make_item("mid", "中" * 60, score=0.5),
+        make_item("low", "低" * 60, score=0.1),
+    ]
+    text, kept = assemble_context(items, budget_tokens=100)
+    assert kept
+    assert [item.id for item in kept] == ["high", "mid"]
+    assert "高" * 60 in text
+    assert "中" * 60 in text
+    assert "低" * 60 not in text
+    assert estimate_tokens(text) <= 100
 
 
 def test_oversized_item_is_skipped_so_smaller_items_still_fit():
