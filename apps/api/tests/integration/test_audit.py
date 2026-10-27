@@ -19,6 +19,16 @@ def _actions(session_factory) -> set[str]:
     return {row.action for row in _rows(session_factory)}
 
 
+def _count_action(session_factory, action: str) -> int:
+    with session_factory() as session:
+        return int(
+            session.scalar(
+                select(func.count()).select_from(AuditLog).where(AuditLog.action == action)
+            )
+            or 0
+        )
+
+
 def test_auth_events_are_audited(client, admin, session_factory) -> None:
     # admin fixture 已完成 setup + login。
     assert {"auth.setup", "auth.login"} <= _actions(session_factory)
@@ -127,3 +137,53 @@ def test_failed_business_write_is_not_audited(client, admin, session_factory) ->
             .where(AuditLog.action == "agent.created", AuditLog.workspace_id == ws["id"])
         )
     assert count == 1
+
+
+def test_duplicate_end_user_creation_returns_409_without_audit(
+    client, admin, workspace, session_factory
+) -> None:
+    payload = {"workspace_id": workspace["id"], "external_id": "u_duplicate"}
+    assert client.post("/api/v1/end-users", json=payload).status_code == 201
+    duplicate = client.post("/api/v1/end-users", json=payload)
+    assert duplicate.status_code == 409, duplicate.text
+    assert duplicate.json()["error"]["code"] == "conflict"
+    assert _count_action(session_factory, "end_user.created") == 1
+
+
+def test_duplicate_rename_returns_409_without_audit(
+    client, admin, workspace, session_factory
+) -> None:
+    first = client.post(
+        "/api/v1/agents", json={"workspace_id": workspace["id"], "name": "甲"}
+    ).json()
+    second = client.post(
+        "/api/v1/agents", json={"workspace_id": workspace["id"], "name": "乙"}
+    ).json()
+
+    renamed = client.patch(f"/api/v1/agents/{second['id']}", json={"name": "甲"})
+    assert renamed.status_code == 409, renamed.text
+    assert renamed.json()["error"]["code"] == "conflict"
+    assert client.get(f"/api/v1/agents/{second['id']}").json()["name"] == "乙"
+    assert _count_action(session_factory, "agent.updated") == 0
+
+    user_one = client.post(
+        "/api/v1/end-users",
+        json={"workspace_id": workspace["id"], "external_id": "u_one"},
+    ).json()
+    user_two = client.post(
+        "/api/v1/end-users",
+        json={"workspace_id": workspace["id"], "external_id": "u_two"},
+    ).json()
+    assert first["id"] and user_one["id"]
+
+    renamed_user = client.patch(
+        f"/api/v1/end-users/{user_two['id']}", json={"external_id": "u_one"}
+    )
+    assert renamed_user.status_code == 409, renamed_user.text
+    assert renamed_user.json()["error"]["code"] == "conflict"
+
+    items = client.get(f"/api/v1/end-users?workspace_id={workspace['id']}").json()["items"]
+    by_id = {item["id"]: item for item in items}
+    assert by_id[user_two["id"]]["external_id"] == "u_two"
+    assert by_id[user_one["id"]]["external_id"] == "u_one"
+    assert _count_action(session_factory, "end_user.updated") == 0

@@ -143,20 +143,20 @@ def create_agent(
     agent = Agent(
         workspace_id=resolved, name=payload.name, description=payload.description
     )
-    session.add(agent)
-    session.flush()
     actor_type, actor_id = audit_actor(context)
-    write_audit(
-        session,
-        action="agent.created",
-        target_type="agent",
-        target_id=agent.id,
-        workspace_id=resolved,
-        actor_type=actor_type,
-        actor_id=actor_id,
-        after=_agent_snapshot(agent),
-    )
     try:
+        session.add(agent)
+        session.flush()  # 唯一索引冲突必须发生在 try 内，才能转成 409
+        write_audit(
+            session,
+            action="agent.created",
+            target_type="agent",
+            target_id=agent.id,
+            workspace_id=resolved,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            after=_agent_snapshot(agent),
+        )
         session.commit()
     except IntegrityError as exc:  # 并发创建同名 Agent
         session.rollback()
@@ -182,33 +182,34 @@ def patch_agent(
 ) -> dict[str, Any]:
     agent = _load_agent(session, context, agent_id)
     before = _agent_snapshot(agent)
-    if payload.name is not None and payload.name != agent.name:
-        duplicate = session.scalar(
-            select(Agent.id).where(
-                Agent.workspace_id == agent.workspace_id,
-                Agent.name == payload.name,
-                Agent.deleted_at.is_(None),
-                Agent.id != agent.id,
-            )
-        )
-        if duplicate is not None:
-            raise ConflictError("同名 Agent 已存在")
-        agent.name = payload.name
-    if "description" in payload.model_fields_set:
-        agent.description = payload.description
     actor_type, actor_id = audit_actor(context)
-    write_audit(
-        session,
-        action="agent.updated",
-        target_type="agent",
-        target_id=agent.id,
-        workspace_id=agent.workspace_id,
-        actor_type=actor_type,
-        actor_id=actor_id,
-        before=before,
-        after=_agent_snapshot(agent),
-    )
     try:
+        if payload.name is not None and payload.name != agent.name:
+            duplicate = session.scalar(
+                select(Agent.id).where(
+                    Agent.workspace_id == agent.workspace_id,
+                    Agent.name == payload.name,
+                    Agent.deleted_at.is_(None),
+                    Agent.id != agent.id,
+                )
+            )
+            if duplicate is not None:
+                raise ConflictError("同名 Agent 已存在")
+            agent.name = payload.name
+        if "description" in payload.model_fields_set:
+            agent.description = payload.description
+        # write_audit 内部 flush 会先刷出上面的 UPDATE，必须也在 try 内。
+        write_audit(
+            session,
+            action="agent.updated",
+            target_type="agent",
+            target_id=agent.id,
+            workspace_id=agent.workspace_id,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            before=before,
+            after=_agent_snapshot(agent),
+        )
         session.commit()
     except IntegrityError as exc:
         session.rollback()
@@ -290,20 +291,20 @@ def create_end_user(
         external_id=payload.external_id,
         display_name=payload.display_name,
     )
-    session.add(end_user)
-    session.flush()
     actor_type, actor_id = audit_actor(context)
-    write_audit(
-        session,
-        action="end_user.created",
-        target_type="end_user",
-        target_id=end_user.id,
-        workspace_id=resolved,
-        actor_type=actor_type,
-        actor_id=actor_id,
-        after=_end_user_snapshot(end_user),
-    )
     try:
+        session.add(end_user)
+        session.flush()  # 唯一索引冲突必须发生在 try 内，才能转成 409
+        write_audit(
+            session,
+            action="end_user.created",
+            target_type="end_user",
+            target_id=end_user.id,
+            workspace_id=resolved,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            after=_end_user_snapshot(end_user),
+        )
         session.commit()
     except IntegrityError as exc:
         session.rollback()
@@ -320,33 +321,37 @@ def patch_end_user(
 ) -> dict[str, Any]:
     end_user = _load_end_user(session, context, end_user_id)
     before = _end_user_snapshot(end_user)
-    if payload.external_id is not None and payload.external_id != end_user.external_id:
-        duplicate = session.scalar(
-            select(EndUser.id).where(
-                EndUser.workspace_id == end_user.workspace_id,
-                EndUser.external_id == payload.external_id,
-                EndUser.deleted_at.is_(None),
-                EndUser.id != end_user.id,
-            )
-        )
-        if duplicate is not None:
-            raise ConflictError("external_id 已存在")
-        end_user.external_id = payload.external_id
-    if "display_name" in payload.model_fields_set:
-        end_user.display_name = payload.display_name
     actor_type, actor_id = audit_actor(context)
-    write_audit(
-        session,
-        action="end_user.updated",
-        target_type="end_user",
-        target_id=end_user.id,
-        workspace_id=end_user.workspace_id,
-        actor_type=actor_type,
-        actor_id=actor_id,
-        before=before,
-        after=_end_user_snapshot(end_user),
-    )
     try:
+        if (
+            payload.external_id is not None
+            and payload.external_id != end_user.external_id
+        ):
+            duplicate = session.scalar(
+                select(EndUser.id).where(
+                    EndUser.workspace_id == end_user.workspace_id,
+                    EndUser.external_id == payload.external_id,
+                    EndUser.deleted_at.is_(None),
+                    EndUser.id != end_user.id,
+                )
+            )
+            if duplicate is not None:
+                raise ConflictError("external_id 已存在")
+            end_user.external_id = payload.external_id
+        if "display_name" in payload.model_fields_set:
+            end_user.display_name = payload.display_name
+        # write_audit 内部 flush 会先刷出上面的 UPDATE，必须也在 try 内。
+        write_audit(
+            session,
+            action="end_user.updated",
+            target_type="end_user",
+            target_id=end_user.id,
+            workspace_id=end_user.workspace_id,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            before=before,
+            after=_end_user_snapshot(end_user),
+        )
         session.commit()
     except IntegrityError as exc:
         session.rollback()
