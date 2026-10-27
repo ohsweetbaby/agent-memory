@@ -176,6 +176,7 @@ active ──(保留率低于阈值)──► archived ──(复习/被检索�
 | `confidence` | 0–1，事实可信度；来源可靠、被多次确认则升高 |
 | `stability` | 遗忘曲线的时间尺度（天），随复习增大 |
 | `access_count` | 被“有效使用”的次数，不是被召回次数 |
+| `version` | 每次更新自增，用于投影幂等与并发控制 |
 | `last_reinforced_at` | 上次强化时间，遗忘计算起点 |
 | `valid_from` / `valid_to` | 事实在现实世界中的有效期，支持时间旅行查询 |
 | `superseded_by` | 被哪条新记忆取代 |
@@ -315,7 +316,7 @@ S = S0 × (1 + 2×importance) × (1 + 0.8×ln(1 + access_count)) × rehearsal_fa
 
 - RRF：`score = Σ 1/(k + rank_i)`，`k=60`。
 - 去重：按 `memory.id`；同一实体的事实若内容近似，保留分数高者。
-- 加权：`final = rrf × (0.8 + 0.2×importance) × scope_weight`。
+- 加权：`final = rrf × (0.8 + 0.2×importance) × scope_weight`；程序性记忆再乘成功率 `(success+1)/(success+failure+2)`（缺省 0.5）。
   - `scope_weight`：session 1.0、agent 0.98、user 0.96、global 0.94（越具体越优先）。
 - 重排：`mode=deep` 时对 top 20 调 reranker（本地 bge-reranker 或兼容 API）；失败自动跳过，不影响主流程。
 - 时间：默认过滤 `status=active` 且 `valid_to is null or valid_to > now()`；`include_history=true` 关闭该过滤。
@@ -456,9 +457,9 @@ S = S0 × (1 + 2×importance) × (1 + 0.8×ln(1 + access_count)) × rehearsal_fa
 | 工作区 | `GET/POST /workspaces`、`GET/PATCH /workspaces/{id}` |
 | Agent | `GET/POST /agents`、`GET/PATCH/DELETE /agents/{id}` |
 | 记忆 | `GET /memories`、`GET/PATCH/DELETE /memories/{id}`、`POST /memories/{id}/pin`、`POST /memories/merge`、`POST /memories/{id}/feedback` |
-| 检索 | `POST /search`（与 MCP 同参数，返回完整分路得分） |
+| 检索 | `POST /search`（与 MCP 同参数，返回完整分路得分）、`GET /timeline` |
 | 待审 | `GET /review`、`POST /review/{id}/approve`、`POST /review/{id}/reject`、`POST /review/bulk` |
-| 任务 | `GET /jobs`、`GET /jobs/{id}`、`POST /jobs/{type}/run`、`POST /jobs/{id}/rollback`、`GET /jobs/{id}/events`（SSE） |
+| 任务 | `GET /jobs`、`GET /jobs/{id}`、`POST /jobs/run`（body 含 `type` 与 `params`）、`POST /jobs/{id}/rollback`、`GET /jobs/{id}/events`（SSE） |
 | 模型 | `GET/POST/PATCH/DELETE /providers`、`POST /providers/{id}/test` |
 | Key | `GET/POST /keys`、`DELETE /keys/{id}` |
 | 统计 | `GET /stats/overview`、`GET /stats/timeseries` |
@@ -512,7 +513,7 @@ session(id, workspace_id, agent_id, end_user_id, started_at, ended_at, summary, 
 memory(
   id, workspace_id, scope, scope_id, type,
   content, summary,
-  importance, confidence, stability, access_count,
+  importance, confidence, stability, access_count, version,
   last_reinforced_at, last_accessed_at,
   valid_from, valid_to, superseded_by,
   status, source_type, source_id,
@@ -520,6 +521,7 @@ memory(
   consolidation_run_id,
   created_at, updated_at, deleted_at
 )
+memory_embedding(memory_id, model, dim, vector, updated_at)  -- 事实源中的嵌入缓存
 memory_link(id, from_id, to_id, relation, weight, evidence, created_at)
 entity(id, workspace_id, name, type, canonical_name, created_at)
 memory_entity(memory_id, entity_id, role)
@@ -583,7 +585,8 @@ provider_config(id, kind, name, base_url, model, dim, extra jsonb, encrypted_sec
 | 任务 | 触发 | 幂等键 | 说明 |
 |---|---|---|---|
 | `extract_conversation` | `conversation_ingest` | `session_id + hash(messages)` | LLM 抽取候选 |
-| `embed_memory` | outbox | `memory_id + version` | 生成/更新嵌入 |
+| `dispatch_outbox` | beat 每 5 秒 | `event id` | 把 outbox 事件分发为投影任务 |
+| `embed_memory` | outbox | `memory_id + version` | 生成/更新嵌入并写入 `memory_embedding` |
 | `project_qdrant` | outbox | `memory_id + version` | 向量 upsert |
 | `project_neo4j` | outbox | `memory_id + version` | 图投影 |
 | `consolidate_session` | 会话结束/空闲 30 分钟 | `session_id` | 工作→情景/语义 |
