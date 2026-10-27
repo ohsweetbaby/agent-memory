@@ -168,3 +168,51 @@ def test_list_is_workspace_scoped_and_excludes_deleted(
     ids = {item["id"] for item in items}
     assert second["id"] in ids
     assert first["id"] not in ids
+
+
+def test_memory_audit_omits_snapshots_and_reports_changed_fields(
+    client, admin, valid_write_payload
+) -> None:
+    created = client.post(
+        "/api/v1/memories", json=valid_write_payload(content="审计正文不可外泄")
+    ).json()
+    assert (
+        client.patch(
+            f"/api/v1/memories/{created['id']}",
+            json={"content": "更新后的正文", "importance": 0.8},
+        ).status_code
+        == 200
+    )
+    assert client.post(f"/api/v1/memories/{created['id']}/pin").status_code == 200
+
+    response = client.get(f"/api/v1/memories/{created['id']}/audit")
+    assert response.status_code == 200, response.text
+    body = response.json()
+    actions = [item["action"] for item in body["items"]]
+    assert {"memory.created", "memory.updated", "memory.pinned"} <= set(actions)
+
+    updated = next(item for item in body["items"] if item["action"] == "memory.updated")
+    assert {"content", "importance"} <= set(updated["changed_fields"])
+    for item in body["items"]:
+        assert set(item) == {
+            "id",
+            "action",
+            "actor_type",
+            "changed_fields",
+            "created_at",
+        }
+    serialized = response.text
+    assert "审计正文不可外泄" not in serialized
+    assert "更新后的正文" not in serialized
+
+
+def test_memory_audit_returns_404_for_deleted_memory(
+    client, admin, valid_write_payload
+) -> None:
+    created = client.post(
+        "/api/v1/memories", json=valid_write_payload(content="删除后无审计入口")
+    ).json()
+    assert client.delete(f"/api/v1/memories/{created['id']}").status_code == 204
+    assert (
+        client.get(f"/api/v1/memories/{created['id']}/audit").status_code == 404
+    )

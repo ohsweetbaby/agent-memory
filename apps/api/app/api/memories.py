@@ -28,7 +28,7 @@ from app.api.deps import (
 from app.auth.session import AuthContext, require_auth, require_scope
 from app.db import get_db
 from app.errors import BadRequestError, ForbiddenError, NotFoundError
-from app.models import Memory, MemoryLink
+from app.models import AuditLog, Memory, MemoryLink
 from app.models.base import utcnow
 from app.repositories.memory import MemoryRepository
 from app.repositories.outbox import OutboxRepository
@@ -128,6 +128,33 @@ def _memory_payload(memory: Memory) -> dict[str, Any]:
         "created_at": memory.created_at,
         "updated_at": memory.updated_at,
         "deleted_at": memory.deleted_at,
+    }
+
+
+# 审计快照可能包含正文、来源原话与 PII；管理台只展示“改了什么”，
+# 不回传 before/after 原文。
+_AUDIT_SENSITIVE_KEYS = {"content", "summary", "metadata", "source_id"}
+
+
+def _audit_payload(entry: AuditLog) -> dict[str, Any]:
+    before = entry.before if isinstance(entry.before, dict) else {}
+    after = entry.after if isinstance(entry.after, dict) else {}
+    changed: list[str] = []
+    if before.get("content") != after.get("content") and (
+        "content" in before or "content" in after
+    ):
+        changed.append("content")
+    for key in sorted(set(before) | set(after)):
+        if key in _AUDIT_SENSITIVE_KEYS or key == "content":
+            continue
+        if before.get(key) != after.get(key):
+            changed.append(key)
+    return {
+        "id": entry.id,
+        "action": entry.action,
+        "actor_type": entry.actor_type,
+        "changed_fields": changed,
+        "created_at": entry.created_at,
     }
 
 
@@ -590,6 +617,27 @@ def get_memory(
     body["history"] = _history_payload(session, memory)
     body["links"] = _links_payload(session, memory)
     return body
+
+
+@router.get("/{memory_id}/audit")
+def get_memory_audit(
+    memory_id: str,
+    limit: int = Query(default=20, ge=1, le=100),
+    context: AuthContext = Depends(require_scope("read")),
+    session: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """返回该记忆的审计轨迹，只含动作与变更字段名，不含快照原文。"""
+    memory = _load_memory(session, context, memory_id)
+    rows = session.scalars(
+        select(AuditLog)
+        .where(
+            AuditLog.target_type == "memory",
+            AuditLog.target_id == memory.id,
+        )
+        .order_by(AuditLog.created_at.desc(), AuditLog.id.desc())
+        .limit(limit)
+    ).all()
+    return {"items": [_audit_payload(entry) for entry in rows]}
 
 
 @router.patch("/{memory_id}")

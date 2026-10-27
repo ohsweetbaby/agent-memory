@@ -132,6 +132,11 @@ export async function seedMemories(
   return { workspaceId, ids };
 }
 
+/** 删除所有待处理候选，保证“队列归零”断言不受其他用例播种影响。 */
+export function clearPendingReviewItems(): void {
+  psql("DELETE FROM review_item WHERE status = 'pending';");
+}
+
 /**
  * 待审项没有公开的创建端点（正常由抽取管线产生），
  * 这里直接向测试库插入，模拟低置信度候选。

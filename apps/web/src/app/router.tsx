@@ -4,8 +4,11 @@ import { AppShell } from "../components/layout/AppShell";
 import { RequireAuth } from "../components/layout/RequireAuth";
 import { DashboardPage } from "../pages/DashboardPage";
 import { LoginPage } from "../pages/LoginPage";
+import { MemoriesPage } from "../pages/MemoriesPage";
+import { MemoryDetailPage } from "../pages/MemoryDetailPage";
 import { NotFoundPage } from "../pages/NotFoundPage";
 import { PlaceholderPage } from "../pages/PlaceholderPage";
+import { ReviewPage } from "../pages/ReviewPage";
 import { SetupPage } from "../pages/SetupPage";
 
 export function AppRoutes() {
@@ -22,24 +25,9 @@ export function AppRoutes() {
         }
       >
         <Route index element={<DashboardPage />} />
-        <Route
-          path="memories"
-          element={
-            <PlaceholderPage
-              title="记忆浏览器"
-              description="浏览、筛选、检索和治理记忆。"
-            />
-          }
-        />
-        <Route
-          path="review"
-          element={
-            <PlaceholderPage
-              title="待审队列"
-              description="审核抽取管线产生的低置信度候选。"
-            />
-          }
-        />
+        <Route path="memories" element={<MemoriesPage />} />
+        <Route path="memories/:memoryId" element={<MemoryDetailPage />} />
+        <Route path="review" element={<ReviewPage />} />
         <Route
           path="jobs"
           element={

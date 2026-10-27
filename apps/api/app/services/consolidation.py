@@ -1860,11 +1860,24 @@ def rollback_run(
     for entry in audits:
         grouped.setdefault(entry.target_id, []).append(entry)
 
+    def _audit_version(entry: AuditLog) -> int:
+        value = (entry.after or {}).get("version")
+        return int(value) if value is not None else -1
+
     checked: list[tuple[AuditLog, Memory]] = []
     conflicts: list[str] = []
     for target_id, entries in grouped.items():
         # 同一目标可能被多条事实连续 merge：用最后一条审计的 after.version 校验，
         # 用第一条审计的 before 恢复。两者混用会把正常合并误判为人工修改。
+        # created_at 可能落在同一微秒，因此按 after.version 排序（version 单调递增），
+        # 时间与 id 仅作为并列时的稳定次序。
+        entries.sort(
+            key=lambda entry: (
+                _audit_version(entry),
+                entry.created_at,
+                entry.id,
+            )
+        )
         first, last = entries[0], entries[-1]
         memory = db.get(Memory, target_id)
         if memory is None:

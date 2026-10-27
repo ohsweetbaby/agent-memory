@@ -325,6 +325,47 @@ def test_rollback_after_multiple_merges_into_same_target(
     assert "merge_evidence" not in (restored.metadata_ or {})
 
 
+def test_rollback_orders_same_timestamp_audits_by_version(
+    db_session, mergeable_memories, fake_llm
+) -> None:
+    """同一目标多次审计时间戳相同且 id 乱序时，仍按 version 找到最后状态。"""
+    fake_llm.set_json(
+        {
+            "summary": "用户讨论了花生过敏",
+            "facts": ["用户对花生过敏", "用户不能吃花生"],
+        }
+    )
+    diff = consolidate_session(db_session, "s1")
+    assert diff.merged_memories == 2
+
+    job = db_session.get(JobRun, diff.job_run_id)
+    assert job is not None and job.finished_at is not None
+    fixed = job.finished_at - timedelta(milliseconds=1)
+    audits = list(
+        db_session.scalars(
+            select(AuditLog).where(
+                AuditLog.action == "memory.consolidated",
+                AuditLog.target_id == "m-merged",
+                AuditLog.after["consolidation_run_id"].astext == diff.job_run_id,
+            )
+        )
+    )
+    assert len(audits) == 2
+    low = next(entry for entry in audits if entry.after["version"] == 2)
+    high = next(entry for entry in audits if entry.after["version"] == 3)
+    low.id = "ffffffff-ffff-7fff-8fff-ffffffffffff"
+    high.id = "00000000-0000-7000-8000-000000000001"
+    low.created_at = fixed
+    high.created_at = fixed
+    db_session.commit()
+
+    assert rollback_run(db_session, diff.job_run_id) == diff.created_memories
+    db_session.expire_all()
+    restored = db_session.query(Memory).filter_by(id="m-merged").one()
+    assert restored.content == "原始内容"
+    assert restored.status == "active"
+
+
 def test_rollback_restores_superseded_validity(
     db_session: Session, fake_llm
 ) -> None:

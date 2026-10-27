@@ -56,3 +56,112 @@ export interface JobListResponse {
   items: JobRun[];
   next_cursor: string | null;
 }
+
+export type MemoryType =
+  | "working"
+  | "episodic"
+  | "semantic"
+  | "procedural"
+  | "perceptual";
+
+export type MemoryScope = "global" | "agent" | "user" | "session";
+
+export type MemoryStatus = "active" | "archived" | "superseded";
+
+export interface MemoryRecord {
+  id: string;
+  workspace_id: string;
+  scope: MemoryScope | string;
+  scope_id: string | null;
+  type: MemoryType | string;
+  content: string;
+  summary: string | null;
+  importance: number;
+  confidence: number;
+  stability: number;
+  access_count: number;
+  version: number;
+  status: MemoryStatus | string;
+  superseded_by: string | null;
+  valid_from: string;
+  valid_to: string | null;
+  source_type: string;
+  source_id: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
+export interface MemoryLink {
+  id: string;
+  from_id: string;
+  to_id: string;
+  relation: string;
+  weight: number | null;
+  evidence: Record<string, unknown> | null;
+}
+
+export interface MemoryDetail extends MemoryRecord {
+  history: MemoryRecord[];
+  links: MemoryLink[];
+}
+
+export interface MemoryListResponse {
+  items: MemoryRecord[];
+  next_cursor: string | null;
+}
+
+export interface AuditEntry {
+  id: string;
+  action: string;
+  actor_type: string;
+  changed_fields: string[];
+  created_at: string;
+}
+
+export interface AuditListResponse {
+  items: AuditEntry[];
+}
+
+export interface ReviewEntity {
+  name?: string;
+  type?: string | null;
+  role?: string | null;
+}
+
+export interface ReviewItem {
+  id: string;
+  workspace_id: string;
+  status: "pending" | "approved" | "rejected" | string;
+  content: string | null;
+  type: string | null;
+  importance: number | null;
+  confidence: number;
+  evidence: Record<string, unknown> | null;
+  entities: ReviewEntity[];
+  scope: string | null;
+  scope_id: string | null;
+  candidate: Record<string, unknown>;
+  created_at: string;
+  reviewed_at: string | null;
+}
+
+export interface ReviewListResponse {
+  items: ReviewItem[];
+  next_cursor: string | null;
+}
+
+export interface ReviewActionResult {
+  review_item_id: string;
+  memory_id?: string;
+  status: string;
+  action?: string;
+  reviewed_at?: string | null;
+}
+
+export interface BulkReviewResult {
+  approved: number;
+  rejected: number;
+  memory_ids: string[];
+}
