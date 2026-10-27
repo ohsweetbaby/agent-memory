@@ -89,11 +89,78 @@ def test_conflict_threshold_boundary_is_inclusive():
     assert decision.kind is ConflictKind.SUPERSEDE
 
 
-def test_closed_candidates_are_ignored():
+def test_future_valid_to_candidate_is_not_excluded():
+    future = datetime(2099, 1, 1, tzinfo=timezone.utc)
+    c = ExistingCandidate("m1", "用户住在北京", 0.99, ("用户", "居住"), valid_to=future)
+    decision = decide_conflict("用户住在北京市", [c], contradiction=None)
+    assert decision.kind is ConflictKind.MERGE
+    assert decision.target_id == "m1"
+
+
+def test_valid_to_filtering_is_callers_responsibility():
     c = ExistingCandidate("m1", "用户住在北京", 0.99, ("用户", "居住"), valid_to=NOW)
     decision = decide_conflict("用户住在北京市", [c], contradiction=None)
+    assert decision.kind is ConflictKind.MERGE
+
+
+def test_different_subject_predicate_does_not_merge():
+    c = ExistingCandidate("m1", "用户喜欢猫", 0.95, ("用户", "喜欢"))
+    decision = decide_conflict(
+        "用户住在北京市",
+        [c],
+        contradiction=None,
+        new_subject_predicate=("用户", "居住"),
+    )
     assert decision.kind is ConflictKind.CREATE
     assert decision.target_id is None
+
+
+def test_mixed_candidates_prefer_matching_subject_predicate():
+    candidates = [
+        ExistingCandidate("m1", "用户住在北京", 0.95, ("用户", "居住")),
+        ExistingCandidate("m2", "用户喜欢住在北京", 0.80, ("用户", "喜欢")),
+    ]
+    decision = decide_conflict(
+        "用户喜欢上海",
+        candidates,
+        contradiction=True,
+        new_subject_predicate=("用户", "喜欢"),
+    )
+    assert decision.kind is ConflictKind.SUPERSEDE
+    assert decision.target_id == "m2"
+
+
+def test_merge_prefers_matching_subject_predicate():
+    candidates = [
+        ExistingCandidate("m1", "用户住在北京", 0.97, ("用户", "居住")),
+        ExistingCandidate("m2", "用户喜欢猫咪", 0.93, ("用户", "喜欢")),
+    ]
+    decision = decide_conflict(
+        "用户喜欢猫科动物",
+        candidates,
+        contradiction=None,
+        new_subject_predicate=("用户", "喜欢"),
+    )
+    assert decision.kind is ConflictKind.MERGE
+    assert decision.target_id == "m2"
+
+
+def test_missing_new_subject_predicate_keeps_legacy_behavior():
+    c = ExistingCandidate("m1", "用户住在北京", 0.95, ("用户", "居住"))
+    decision = decide_conflict("用户住在北京市", [c], contradiction=None)
+    assert decision.kind is ConflictKind.MERGE
+    assert decision.target_id == "m1"
+
+
+def test_candidate_without_subject_predicate_is_not_filtered():
+    c = ExistingCandidate("m1", "用户住在北京", 0.95)
+    decision = decide_conflict(
+        "用户住在北京市",
+        [c],
+        contradiction=None,
+        new_subject_predicate=("用户", "居住"),
+    )
+    assert decision.kind is ConflictKind.MERGE
 
 
 def test_every_decision_has_audit_reason():

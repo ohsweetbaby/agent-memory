@@ -9,8 +9,11 @@
 5. 其余：直接新建。
 
 本模块是纯决策函数：LLM 判定由上层完成，只把 ``contradiction`` 作为输入传入；
-函数不访问 DB、网络或模型，也不修改任何候选对象。已带 ``valid_to`` 的候选
-视为有效期已关闭（上层候选集本应只含 active 记忆），不参与决策。
+函数不访问 DB、网络或模型，也不修改任何候选对象。**调用方只传 active 候选**，
+本模块不依据 ``valid_to`` 过滤（该字段仅供调用方表达有效期）。
+
+若传入 ``new_subject_predicate``，双方都有主谓且不一致的候选不参与
+MERGE / SUPERSEDE / COEXIST；新内容未提供主谓时不做额外过滤，保持兼容。
 """
 
 from __future__ import annotations
@@ -37,8 +40,8 @@ class ConflictKind(str, Enum):
 class ExistingCandidate:
     """一条已有记忆及其与新内容的相似度。
 
-    ``subject_predicate`` 供上层做同主谓筛选或审计，本模块不据此改变决策；
-    ``valid_to`` 非空表示有效期已关闭。
+    ``subject_predicate`` 供同主谓校验与审计；``valid_to`` 仅供调用方表达有效期，
+    本模块不做过滤（调用方应只传 active 候选）。
     """
 
     id: str
@@ -57,12 +60,23 @@ class ConflictDecision:
     reason: str
 
 
+def _subject_predicate_compatible(
+    new_subject_predicate: tuple[str, str] | None,
+    candidate_subject_predicate: tuple[str, str] | None,
+) -> bool:
+    """双方都有主谓时才要求相等；任一方缺失则不额外过滤。"""
+    if new_subject_predicate is None or candidate_subject_predicate is None:
+        return True
+    return new_subject_predicate == candidate_subject_predicate
+
+
 def decide_conflict(
     new_content: str,
     candidates: Sequence[ExistingCandidate],
     *,
     contradiction: bool | None,
     temporal_change: bool = False,
+    new_subject_predicate: tuple[str, str] | None = None,
     merge_threshold: float = DEFAULT_MERGE_THRESHOLD,
     conflict_threshold: float = DEFAULT_CONFLICT_THRESHOLD,
 ) -> ConflictDecision:
@@ -72,14 +86,22 @@ def decide_conflict(
     候选集决策。``contradiction`` 为 ``None`` 表示上层未做或未完成矛盾判定，
     此时只有近重复会合并，其余一律新建。相似度最高的候选并列时取候选序列中
     靠前者，保证结果确定。每个分支都返回可审计的 ``reason``。
+
+    ``new_subject_predicate`` 可选。提供后，双方主谓都存在且不一致的候选会被
+    排除在 MERGE / SUPERSEDE / COEXIST 之外；任一方主谓缺失时该候选仍参与决策。
+    候选是否 active 由调用方保证，本函数不看 ``valid_to``。
     """
-    active = [candidate for candidate in candidates if candidate.valid_to is None]
-    if not active:
+    eligible = [
+        candidate
+        for candidate in candidates
+        if _subject_predicate_compatible(new_subject_predicate, candidate.subject_predicate)
+    ]
+    if not eligible:
         if candidates:
             return ConflictDecision(
                 ConflictKind.CREATE,
                 None,
-                "候选均已关闭有效期，无可合并或取代的目标，直接新建",
+                "候选主谓均与待写入内容不一致，无可合并或取代的目标，直接新建",
             )
         return ConflictDecision(
             ConflictKind.CREATE,
@@ -87,7 +109,7 @@ def decide_conflict(
             "无相似度候选，直接新建",
         )
 
-    best = max(active, key=lambda candidate: candidate.similarity)
+    best = max(eligible, key=lambda candidate: candidate.similarity)
 
     if best.similarity >= merge_threshold:
         return ConflictDecision(
