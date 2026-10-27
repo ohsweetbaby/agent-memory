@@ -22,7 +22,8 @@ import os
 import re
 import sys
 import uuid
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any
@@ -33,6 +34,7 @@ from mcp.client.streamable_http import streamable_http_client
 from mcp.server.fastmcp import FastMCP
 from mcp.shared.exceptions import McpError
 from mcp.types import ErrorData
+from pydantic import AnyUrl
 
 logger = logging.getLogger("memory_mcp")
 
@@ -44,6 +46,8 @@ ERR_INTERNAL = -32603
 _ERROR_MARKER = re.compile(r"\[mcp:(-?\d+)\]\s*(\{.*\})", re.DOTALL)
 
 Caller = Callable[[str, dict[str, Any]], Awaitable[dict[str, Any]]]
+Reader = Callable[[str], Awaitable[str]]
+Prompter = Callable[[str, dict[str, str] | None], Awaitable[str]]
 
 
 class ProxyFailure(Exception):
@@ -87,10 +91,9 @@ def _find_exception(exc: BaseException, kind: type[BaseException]) -> BaseExcept
     return None
 
 
-async def call_remote(
-    settings: HttpSettings, name: str, arguments: dict[str, Any]
-) -> dict[str, Any]:
-    """一次工具调用：短连接 Streamable HTTP，用完即关。"""
+@asynccontextmanager
+async def _remote_session(settings: HttpSettings) -> AsyncIterator[ClientSession]:
+    """一次短连接 Streamable HTTP 会话；透传 Key 与 trace id。"""
     headers = {"Authorization": f"Bearer {settings.api_key}"}
     trace = settings.trace_id or _trace_id()
     headers["X-Request-ID"] = trace
@@ -106,11 +109,7 @@ async def call_remote(
             ) as (read, write, _):
                 async with ClientSession(read, write) as session:
                     await session.initialize()
-                    result = await session.call_tool(
-                        name,
-                        arguments,
-                        read_timeout_seconds=timedelta(minutes=5),
-                    )
+                    yield session
     except ProxyFailure:
         raise
     except BaseException as exc:  # noqa: BLE001 - 任务组会包装底层异常
@@ -130,22 +129,57 @@ async def call_remote(
             ) from exc
         raise
 
-    if result.isError:
-        text = "".join(
-            block.text
-            for block in result.content
-            if isinstance(block, types.TextContent)
+
+def _text_content(blocks: Any) -> str:
+    return "".join(
+        block.text for block in blocks if isinstance(block, types.TextContent)
+    )
+
+
+async def call_remote(
+    settings: HttpSettings, name: str, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    """转发工具调用并返回 structuredContent。"""
+    async with _remote_session(settings) as session:
+        result = await session.call_tool(
+            name,
+            arguments,
+            read_timeout_seconds=timedelta(minutes=5),
         )
+
+    if result.isError:
+        text = _text_content(result.content)
         raise ProxyFailure(ERR_INTERNAL, text or "远端工具执行失败")
 
     if result.structuredContent is not None:
         return result.structuredContent
-    text = "".join(
-        block.text
-        for block in result.content
-        if isinstance(block, types.TextContent)
+    return {"content": _text_content(result.content)}
+
+
+async def read_remote_resource(settings: HttpSettings, uri: str) -> str:
+    """读取远端 Resource，返回 Markdown/文本内容。"""
+    async with _remote_session(settings) as session:
+        result = await session.read_resource(AnyUrl(uri))
+    parts: list[str] = []
+    for content in result.contents:
+        text = getattr(content, "text", None)
+        parts.append(text if text is not None else "")
+    return "\n".join(part for part in parts if part)
+
+
+async def get_remote_prompt(
+    settings: HttpSettings,
+    name: str,
+    arguments: dict[str, str] | None = None,
+) -> str:
+    """读取远端 Prompt，拼成单段文本。"""
+    async with _remote_session(settings) as session:
+        result = await session.get_prompt(name, arguments)
+    return "\n".join(
+        text
+        for message in result.messages
+        if (text := getattr(message.content, "text", ""))
     )
-    return {"content": text}
 
 
 def _guard(fn: Callable[..., Awaitable[dict[str, Any]]]):
@@ -183,9 +217,11 @@ def install_error_translation(server: FastMCP) -> None:
     """让 stdio 客户端也能收到 JSON-RPC 错误码而不是 isError 文本。"""
     handlers = getattr(server._mcp_server, "request_handlers", {})  # noqa: SLF001
     original = handlers.get(types.CallToolRequest)
-    if original is None:  # pragma: no cover
-        logger.warning("call_tool handler missing; errors stay isError")
-        return
+    if original is None:
+        raise RuntimeError(
+            "MCP SDK 结构不兼容：缺少 CallToolRequest handler；"
+            "请使用 mcp>=1.30,<1.31"
+        )
 
     async def translated(request: types.CallToolRequest) -> Any:
         result = await original(request)
@@ -208,21 +244,62 @@ def build_server(
     api_key: str,
     *,
     caller: Caller | None = None,
+    reader: Reader | None = None,
+    prompter: Prompter | None = None,
     trace_id: str | None = None,
 ) -> FastMCP:
-    """构建 stdio MCP 服务；``caller`` 仅用于测试替身。"""
+    """构建 stdio MCP 服务；``caller``/``reader``/``prompter`` 仅用于测试替身。"""
     server = FastMCP(
         name="agent-memory-stdio",
         instructions=(
             "把本地 stdio MCP 请求转发到 Agent Memory HTTP 服务；"
-            "工具语义、错误码与远端完全一致。"
+            "工具、资源、提示词语义与远端完全一致。"
         ),
     )
     settings = HttpSettings(api_url=api_url, api_key=api_key, trace_id=trace_id)
     invoke = caller or (lambda name, arguments: call_remote(settings, name, arguments))
+    read_proxy = reader or (lambda uri: read_remote_resource(settings, uri))
+    prompt_proxy = prompter or (
+        lambda name, arguments: get_remote_prompt(settings, name, arguments)
+    )
 
     async def _forward(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         return await invoke(name, arguments)
+
+    @server.resource(
+        "memory://recent",
+        name="recent_memories",
+        description="远端最近 20 条 active 记忆（Markdown）。",
+        mime_type="text/markdown",
+    )
+    async def recent_memories() -> str:
+        return await read_proxy("memory://recent")
+
+    @server.resource(
+        "memory://entities/{name}",
+        name="entity_memories",
+        description="远端实体关联记忆（Markdown）。",
+        mime_type="text/markdown",
+    )
+    async def entity_memories(name: str) -> str:
+        return await read_proxy(f"memory://entities/{name}")
+
+    @server.resource(
+        "memory://{memory_id}",
+        name="memory",
+        description="远端单条记忆（Markdown，正文截断 4 KB）。",
+        mime_type="text/markdown",
+    )
+    async def memory_resource(memory_id: str) -> str:
+        return await read_proxy(f"memory://{memory_id}")
+
+    @server.prompt(
+        name="memory_aware_system",
+        description="远端记忆感知系统提示词：先检索、引用 id、冲突以有效事实为准。",
+    )
+    async def memory_aware_system(task: str | None = None) -> str:
+        arguments = {"task": task} if task else None
+        return await prompt_proxy("memory_aware_system", arguments)
 
     @server.tool(name="memory_search", description="检索记忆（转发到 HTTP /mcp）。")
     @_guard

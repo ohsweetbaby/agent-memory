@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import socket
 from collections.abc import AsyncIterator
 from concurrent.futures import ThreadPoolExecutor
@@ -36,6 +37,8 @@ else:
 APP_VERSION = "0.1.0"
 CHECK_TIMEOUT_SECONDS = 0.5
 MCP_PATH = "/mcp"
+
+logger = logging.getLogger(__name__)
 
 REQUEST_COUNT = Counter(
     "http_requests",
@@ -100,8 +103,12 @@ def check_qdrant() -> bool:
     return response.status_code == 200
 
 
-def collect_health() -> dict[str, Any]:
-    """并行检查四个依赖，任一失败即为 degraded。"""
+def collect_health(extra: dict[str, bool] | None = None) -> dict[str, Any]:
+    """并行检查四个依赖，任一失败即为 degraded。
+
+    ``extra`` 用于纳入非网络依赖（例如 MCP SDK 结构校验），值为 False 时
+    同样把整体状态置为 degraded。
+    """
     checks = {
         "postgres": check_postgres,
         "redis": check_redis,
@@ -116,6 +123,7 @@ def collect_health() -> dict[str, Any]:
                 components[name] = bool(future.result())
             except Exception:  # 健康检查本身不能把 /health 打成 500
                 components[name] = False
+    components.update(extra or {})
     status = "ok" if all(components.values()) else "degraded"
     return {"status": status, "components": components}
 
@@ -207,12 +215,22 @@ def create_app(
 
     mcp_gateway: _McpGateway | None = None
     mcp_unavailable = False
+    mcp_error = MCP_IMPORT_ERROR
     if resolved.mcp_enabled:
         if build_mcp_server is None:  # pragma: no cover - 依赖缺失分支
             mcp_unavailable = True
         else:
-            services = mcp_services or default_mcp_services(resolved)
-            mcp_gateway = _McpGateway(build_mcp_server(services))
+            try:
+                services = mcp_services or default_mcp_services(resolved)
+                mcp_gateway = _McpGateway(build_mcp_server(services))
+            except Exception as exc:  # noqa: BLE001 - 启动失败要降级成 503，而不是静默
+                logger.error(
+                    "mcp initialization failed",
+                    extra={"error": type(exc).__name__},
+                )
+                mcp_unavailable = True
+                mcp_error = f"{type(exc).__name__}: {exc}"
+                mcp_gateway = None
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -237,8 +255,8 @@ def create_app(
 
     if mcp_gateway is not None:
         application.mount(MCP_PATH, BearerTokenMiddleware(mcp_gateway))
-    elif mcp_unavailable:  # pragma: no cover - 依赖缺失分支
-        application.mount(MCP_PATH, _UnavailableMcpApp(MCP_IMPORT_ERROR))
+    elif mcp_unavailable:  # pragma: no cover - 依赖缺失/初始化失败分支
+        application.mount(MCP_PATH, _UnavailableMcpApp(mcp_error))
 
     if resolved.is_development:
         application.add_middleware(
@@ -264,7 +282,10 @@ def create_app(
     @application.get("/health")
     def health() -> dict[str, Any]:
         """返回整体状态与各依赖可用性；降级时仍返回 200。"""
-        return collect_health()
+        extra = (
+            {"mcp": mcp_gateway is not None} if resolved.mcp_enabled else None
+        )
+        return collect_health(extra)
 
     @application.get("/metrics")
     def metrics() -> Response:

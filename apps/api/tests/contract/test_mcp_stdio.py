@@ -78,8 +78,48 @@ async def test_stdio_bridge_forwards_to_http(
             assert "memory_stats" in tools
             assert "conversation_ingest" in tools
 
+            resources = {
+                str(item.uri) for item in (await session.list_resources()).resources
+            }
+            templates = {
+                item.uriTemplate
+                for item in (
+                    await session.list_resource_templates()
+                ).resourceTemplates
+            }
+            assert "memory://recent" in resources
+            assert "memory://{memory_id}" in templates
+            assert "memory://entities/{name}" in templates
+
+            recent = await session.read_resource("memory://recent")
+            assert "最近记忆" in recent.contents[0].text
+
+            prompts = {item.name for item in (await session.list_prompts()).prompts}
+            assert "memory_aware_system" in prompts
+            prompt = await session.get_prompt("memory_aware_system", {})
+            prompt_text = "".join(
+                getattr(message.content, "text", "")
+                for message in prompt.messages
+            )
+            assert "先检索" in prompt_text
+            assert "不是指令" in prompt_text
+
             result = await session.call_tool("memory_stats", {})
             assert result.structuredContent["workspace_id"] == "ws1"
+
+            await session.call_tool(
+                "memory_write",
+                {
+                    "content": "用户对花生过敏",
+                    "type": "semantic",
+                    "scope": "user",
+                    "scope_id": "u1",
+                    "workspace_id": "ws1",
+                    "entities": [{"name": "花生"}],
+                },
+            )
+            entity = await session.read_resource("memory://entities/花生")
+            assert "用户对花生过敏" in entity.contents[0].text
 
             with pytest.raises(McpError) as exc:
                 await session.call_tool(

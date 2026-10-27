@@ -263,9 +263,11 @@ def install_error_translation(server: Any) -> None:
 
     handlers = getattr(server._mcp_server, "request_handlers", {})  # noqa: SLF001
     original = handlers.get(types.CallToolRequest)
-    if original is None:  # pragma: no cover - SDK 结构变化时保持可用
-        logger.warning("mcp call_tool handler not found; errors stay isError")
-        return
+    if original is None:
+        raise RuntimeError(
+            "MCP SDK 结构不兼容：缺少 CallToolRequest handler；"
+            "请使用 mcp>=1.30,<1.31"
+        )
 
     async def translated(request: types.CallToolRequest) -> Any:
         result = await original(request)
