@@ -1,0 +1,63 @@
+"""应用配置。
+
+所有运行期配置均来自环境变量（或本地 `.env`），仓库内不保存真实密钥。
+"""
+
+from __future__ import annotations
+
+from functools import lru_cache
+from pathlib import Path
+
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    """从环境变量加载的服务配置。"""
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",
+    )
+
+    # 运行环境：development 时放开 CORS，生产环境由反向代理同源访问。
+    environment: str = "development"
+    log_level: str = "INFO"
+    cors_origins: str = "http://localhost:5173,http://localhost:8080"
+
+    # 存储与队列
+    database_url: str = (
+        "postgresql+psycopg://agent_memory:agent_memory@localhost:5432/agent_memory"
+    )
+    redis_url: str = "redis://localhost:6379/0"
+    qdrant_url: str = "http://localhost:6333"
+    neo4j_uri: str = "bolt://localhost:7687"
+    neo4j_user: str = "neo4j"
+    neo4j_password: str = Field(default="change-me", repr=False)
+    secret_key: str = Field(default="dev-only-change-me", repr=False)
+    assets_dir: Path = Path("./assets")
+
+    # 模型服务
+    embedding_provider: str = "openai"
+    embedding_model: str = "text-embedding-3-small"
+    embedding_dim: int = 1536
+    llm_base_url: str = "https://api.openai.com/v1"
+    llm_api_key: str = Field(default="", repr=False)
+
+    @property
+    def is_development(self) -> bool:
+        """开发环境才允许跨域访问。"""
+        return self.environment.strip().lower() in {"development", "dev", "local"}
+
+    @property
+    def cors_origin_list(self) -> list[str]:
+        """把逗号分隔的 CORS 来源解析为列表。"""
+        return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+
+
+@lru_cache(maxsize=1)
+def get_settings() -> Settings:
+    """进程内复用同一份配置。"""
+    return Settings()
