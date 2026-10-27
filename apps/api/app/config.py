@@ -39,6 +39,15 @@ class Settings(BaseSettings):
     secret_key: str = Field(default="dev-only-change-me", repr=False)
     assets_dir: Path = Path("./assets")
 
+    # 认证：会话 Cookie、登录限流与 API Key 限流
+    session_cookie_name: str = "am_session"
+    session_max_age_seconds: int = 7 * 24 * 3600
+    login_failure_limit: int = 5
+    login_failure_window_seconds: int = 60
+    login_lockout_seconds: int = 900
+    api_key_read_rpm: int = 120
+    api_key_write_rpm: int = 30
+
     # 模型服务
     embedding_provider: str = "openai"
     embedding_model: str = "text-embedding-3-small"
@@ -55,6 +64,27 @@ class Settings(BaseSettings):
     def cors_origin_list(self) -> list[str]:
         """把逗号分隔的 CORS 来源解析为列表。"""
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+
+    @property
+    def is_production(self) -> bool:
+        """生产环境强制 Secure Cookie。"""
+        return self.environment.strip().lower() in {"production", "prod"}
+
+
+_current_settings: Settings | None = None
+
+
+def set_current_settings(settings: Settings) -> None:
+    """由 ``create_app`` 注入本次应用实例的配置。"""
+    global _current_settings
+    _current_settings = settings
+
+
+def get_current_settings() -> Settings:
+    """返回当前应用实例的配置；未创建应用时回退到进程配置。"""
+    if _current_settings is not None:
+        return _current_settings
+    return get_settings()
 
 
 @lru_cache(maxsize=1)

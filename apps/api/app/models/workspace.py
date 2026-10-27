@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import DateTime, ForeignKey, Index, String, Text, UniqueConstraint, func
+from sqlalchemy import DateTime, ForeignKey, Index, String, Text, func, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, CreatedAtMixin, jsonb_column, utcnow
@@ -20,7 +20,14 @@ class Workspace(Base, CreatedAtMixin):
 class Agent(Base, CreatedAtMixin):
     __tablename__ = "agent"
     __table_args__ = (
-        UniqueConstraint("workspace_id", "name"),
+        # 软删除后允许同名 Agent 重建，因此唯一性只约束未删除行。
+        Index(
+            "uq_agent_workspace_id_name_active",
+            "workspace_id",
+            "name",
+            unique=True,
+            postgresql_where=text("deleted_at IS NULL"),
+        ),
         Index("ix_agent_workspace_id", "workspace_id"),
     )
 
@@ -33,7 +40,14 @@ class Agent(Base, CreatedAtMixin):
 class EndUser(Base, CreatedAtMixin):
     __tablename__ = "end_user"
     __table_args__ = (
-        UniqueConstraint("workspace_id", "external_id"),
+        # 同样的软删除语义：仅未删除行占用 external_id。
+        Index(
+            "uq_end_user_workspace_id_external_id_active",
+            "workspace_id",
+            "external_id",
+            unique=True,
+            postgresql_where=text("deleted_at IS NULL"),
+        ),
         Index("ix_end_user_workspace_id", "workspace_id"),
     )
 

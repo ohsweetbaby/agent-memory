@@ -12,14 +12,13 @@ from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, generate_latest
 
-from app.config import Settings, get_settings
+from app.api import ROUTERS
+from app.config import Settings, get_current_settings, set_current_settings
+from app.errors import install_error_handlers
 from app.logging import configure_logging
 
 APP_VERSION = "0.1.0"
 CHECK_TIMEOUT_SECONDS = 0.5
-
-# create_app 注入的配置；健康检查函数保持无参，便于测试 monkeypatch。
-_active_settings: Settings | None = None
 
 REQUEST_COUNT = Counter(
     "http_requests",
@@ -30,9 +29,7 @@ REQUEST_COUNT = Counter(
 
 def _current_settings() -> Settings:
     """返回当前应用实例的配置。"""
-    if _active_settings is None:
-        return get_settings()
-    return _active_settings
+    return get_current_settings()
 
 
 def _tcp_reachable(url: str, default_port: int) -> bool:
@@ -114,9 +111,8 @@ def _route_label(request: Request) -> str:
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     """创建 API 应用。"""
-    global _active_settings
     resolved = settings or Settings()
-    _active_settings = resolved
+    set_current_settings(resolved)
     configure_logging(resolved.log_level)
 
     application = FastAPI(
@@ -125,6 +121,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         docs_url="/docs" if resolved.is_development else None,
         redoc_url=None,
     )
+
+    install_error_handlers(application)
+    for router in ROUTERS:
+        application.include_router(router)
 
     if resolved.is_development:
         application.add_middleware(

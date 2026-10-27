@@ -16,6 +16,7 @@ M1_TABLES = {
     "workspace",
     "agent",
     "end_user",
+    "admin_user",
     "session",
     "memory",
     "memory_embedding",
@@ -69,4 +70,25 @@ def test_models_match_migration(db_engine: Engine, run_alembic) -> None:
     with db_engine.connect() as connection:
         context = MigrationContext.configure(connection)
         assert compare_metadata(context, Base.metadata) == []
+
+
+def test_soft_delete_unique_indexes_are_partial(db_engine: Engine, run_alembic) -> None:
+    """自然键唯一性只约束未删除行，软删后可以重建同名对象。"""
+    run_alembic("upgrade", "head")
+    with db_engine.connect() as connection:
+        rows = connection.execute(
+            text(
+                "SELECT indexname, indexdef FROM pg_indexes "
+                "WHERE tablename IN ('agent', 'end_user')"
+            )
+        ).all()
+    definitions = {name: definition for name, definition in rows}
+
+    for index_name in (
+        "uq_agent_workspace_id_name_active",
+        "uq_end_user_workspace_id_external_id_active",
+    ):
+        assert index_name in definitions
+        assert "UNIQUE INDEX" in definitions[index_name]
+        assert "WHERE (deleted_at IS NULL)" in definitions[index_name]
 

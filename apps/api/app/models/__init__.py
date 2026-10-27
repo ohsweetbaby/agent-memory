@@ -5,7 +5,7 @@ Alembic 通过导入本模块确保 ``Base.metadata`` 包含全部 M1 表。
 
 from __future__ import annotations
 
-from app.models.auth import ApiKey, ProviderConfig
+from app.models.auth import AdminUser, ApiKey, ProviderConfig
 from app.models.base import Base, new_uuid7, utcnow
 from app.models.memory import (
     Entity,
@@ -24,6 +24,7 @@ from app.models.ops import (
 from app.models.workspace import Agent, EndUser, Episode, Session, Workspace
 
 __all__ = [
+    "AdminUser",
     "Agent",
     "ApiKey",
     "AuditLog",

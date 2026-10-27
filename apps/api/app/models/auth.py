@@ -18,7 +18,19 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.models.base import Base, CreatedAtMixin, jsonb_column
+from app.models.base import Base, CreatedAtMixin, TimestampMixin, jsonb_column, utcnow
+
+
+class AdminUser(Base, TimestampMixin):
+    """管理台管理员；首次启动由 ``/auth/setup`` 创建。"""
+
+    __tablename__ = "admin_user"
+    __table_args__ = (UniqueConstraint("username"),)
+
+    username: Mapped[str] = mapped_column(String(64), nullable=False)
+    # Argon2id 哈希；永远不保存明文。
+    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class ApiKey(Base, CreatedAtMixin):
