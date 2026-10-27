@@ -14,6 +14,10 @@ from app.jobs.runtime import Runtime, configure_runtime, reset_runtime
 from app.jobs.tasks import reset_pending
 from app.models import AuditLog, Entity, JobRun, Memory, ReviewItem
 from app.models.base import utcnow
+from app.schemas.memory import (
+    ValidationError as ContentValidationError,
+    ensure_no_nul,
+)
 from app.services.extraction import ingest_conversation
 
 pytestmark = pytest.mark.integration
@@ -302,6 +306,60 @@ def test_candidate_with_nul_evidence_is_skipped(
     assert job.result["skipped"] == 1
     assert db_session.query(Memory).count() == 0
     assert db_session.query(ReviewItem).count() == 0
+
+
+def test_reingesting_dead_letter_restores_full_messages(
+    db_session: Session, fake_llm, admin, ingest_payload, run_worker_once
+) -> None:
+    """死信被裁剪后，同一对话重新 ingest 必须回填完整消息再重跑。"""
+    messages = [
+        {"role": "user", "content": f"第{index}条：" + "历史" * 1000}
+        for index in range(6)
+    ]
+    messages.append(
+        {
+            "role": "user",
+            "content": "最新关键信息：用户对花生过敏" + "补充" * 1000,
+        }
+    )
+    payload = ingest_payload(messages=messages)
+
+    fake_llm.set_text("not json")
+    first = ingest_conversation(db_session, payload, admin)
+    run_worker_once()
+
+    job = _job(db_session, first.task_id)
+    assert job.status == "dead"
+    assert job.params["redacted"] is True
+    assert len(job.params["messages"]) == 5
+
+    fake_llm.last_messages = []
+    fake_llm.set_json(_candidate_json(evidence="最新关键信息"))
+    second = ingest_conversation(db_session, payload, admin)
+
+    assert second.task_id == first.task_id
+    job = _job(db_session, second.task_id)
+    assert job.status == "pending"
+    assert "redacted" not in job.params
+    assert len(job.params["messages"]) == len(messages)
+    assert job.params["message_count"] == len(messages)
+
+    run_worker_once()
+    assert "最新关键信息：用户对花生过敏" in fake_llm.last_messages[-1]["content"]
+    assert db_session.query(Memory).filter_by(content="用户对花生过敏").count() == 1
+
+
+def test_ensure_no_nul_rejects_all_unstorable_characters() -> None:
+    """与 normalize_content 共用同一套校验：NUL 与孤立代理对都 422。"""
+    with pytest.raises(ContentValidationError) as nul_exc:
+        ensure_no_nul("a\u0000b", "messages[0].content")
+    assert nul_exc.value.resolved_code == "invalid_character"
+    assert nul_exc.value.details["character"] == "\\u0000"
+
+    with pytest.raises(ContentValidationError) as surrogate_exc:
+        ensure_no_nul("用户\ud800过敏", "messages[0].content")
+    assert surrogate_exc.value.resolved_code == "invalid_character"
+    assert surrogate_exc.value.details["character"] == "\\ud800"
 
 
 def test_long_entity_name_is_truncated(

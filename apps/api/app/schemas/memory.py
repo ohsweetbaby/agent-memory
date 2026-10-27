@@ -88,13 +88,19 @@ def _invalid_character(text: str) -> str | None:
 
 
 def ensure_no_nul(value: str | None, field: str) -> None:
-    """拒绝会破坏 PostgreSQL text/JSONB 的 NUL 字符，统一 422。"""
-    if isinstance(value, str) and "\x00" in value:
-        raise ValidationError(
-            "包含无法存储的字符",
-            code="invalid_character",
-            details={"field": field, "character": "\\u0000"},
-        )
+    """拒绝会破坏 PostgreSQL text/JSONB 的字符，统一 422。
+
+    与 :func:`normalize_content` 共用 ``_invalid_character``，因此 NUL、
+    孤立代理对与无法编码为 UTF-8 的字符都在这里拦截。
+    """
+    if isinstance(value, str):
+        invalid = _invalid_character(value)
+        if invalid is not None:
+            raise ValidationError(
+                "包含无法存储的字符",
+                code="invalid_character",
+                details={"field": field, "character": invalid},
+            )
 
 
 class EntitySpec(BaseModel):

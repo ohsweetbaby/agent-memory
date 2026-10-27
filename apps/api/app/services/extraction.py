@@ -337,7 +337,7 @@ def _decode_payload(raw: str) -> list[Any]:
         else:
             raise ExtractionError("LLM 输出缺少 candidates 数组")
     if not isinstance(data, list):
-        raise ExtractionError("LLM 输出必须是 JSON 数组")
+        raise ExtractionError("LLM 输出必须是包含 candidates 的 JSON 对象")
     return data
 
 
@@ -738,6 +738,30 @@ def _enqueue_job(db: Session, job: JobRun, task_id: str) -> None:
         ) from exc
 
 
+def _job_params(
+    req: ConversationIngestRequest,
+    messages: list[dict[str, Any]],
+    scope: Scope,
+    scope_id: str | None,
+    digest: str,
+    actor_type: str,
+    actor_id: str | None,
+) -> dict[str, Any]:
+    """构造 job_run.params；重置死信任务时也用它回填完整本次请求。"""
+    return {
+        "workspace_id": req.workspace_id,
+        "session_id": req.session_id,
+        "messages": messages,
+        "message_count": len(messages),
+        "scope": scope.value,
+        "scope_id": scope_id,
+        "auto_accept": req.auto_accept,
+        "digest": digest,
+        "actor_type": actor_type,
+        "actor_id": actor_id,
+    }
+
+
 def ingest_conversation(
     db: Session, req: ConversationIngestRequest, actor: Any
 ) -> IngestResult:
@@ -762,10 +786,15 @@ def ingest_conversation(
     digest = conversation_digest(req.session_id, messages)
     task_id = task_id_for(req.workspace_id, digest)
     actor_type, actor_id = actor_fields(actor)
+    params = _job_params(
+        req, messages, scope, scope_id, digest, actor_type, actor_id
+    )
 
     existing = db.get(JobRun, task_id)
     if existing is not None:
         if existing.status in {"failed", "dead"}:
+            # 死信任务可能已被裁剪；必须用本次请求回填完整消息再重跑。
+            existing.params = params
             existing.status = "pending"
             existing.error = None
             existing.result = None
@@ -780,18 +809,7 @@ def ingest_conversation(
         type=JOB_TYPE_EXTRACT_CONVERSATION,
         scope=f"session:{req.session_id}"[:255],
         status="pending",
-        params={
-            "workspace_id": req.workspace_id,
-            "session_id": req.session_id,
-            "messages": messages,
-            "message_count": len(messages),
-            "scope": scope.value,
-            "scope_id": scope_id,
-            "auto_accept": req.auto_accept,
-            "digest": digest,
-            "actor_type": actor_type,
-            "actor_id": actor_id,
-        },
+        params=params,
     )
     db.add(job)
     try:
