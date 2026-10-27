@@ -56,6 +56,8 @@ class JobRunRequest(BaseModel):
     type: Literal["consolidate_session", "consolidate_nightly"]
     params: dict[str, Any] = Field(default_factory=dict)
     dry_run: bool = False
+    #: 允许相同窗口重跑（回滚后重新巩固）。
+    force: bool = False
 
 
 def _job_payload(job: JobRun) -> dict[str, Any]:
@@ -173,6 +175,7 @@ def run_job(
             dry_run=payload.dry_run,
             workspace_id=conversation.workspace_id,
             actor=context,
+            force=payload.force,
         )
         return diff.to_dict()
 

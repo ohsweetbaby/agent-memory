@@ -25,7 +25,7 @@ import uuid
 from collections.abc import Iterable, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import delete, func, not_, or_, select
@@ -101,10 +101,13 @@ class ConsolidationDiff:
     archived_working: int = 0
     clusters: int = 0
     actions: tuple[dict[str, Any], ...] = ()
+    skipped_actions: tuple[dict[str, Any], ...] = ()
+    job_run_ids: tuple[str, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "job_run_id": self.job_run_id,
+            "job_run_ids": list(self.job_run_ids),
             "job_type": self.job_type,
             "dry_run": self.dry_run,
             "replayed": self.replayed,
@@ -115,6 +118,7 @@ class ConsolidationDiff:
             "archived_working": self.archived_working,
             "clusters": self.clusters,
             "actions": [dict(action) for action in self.actions],
+            "skipped_actions": [dict(action) for action in self.skipped_actions],
         }
 
 
@@ -144,6 +148,18 @@ class _Plan:
         return [action for action in self.actions if action["action"] == "archive"]
 
 
+@dataclass(slots=True)
+class _Tally:
+    """实际写入结果；与计划动作分开统计，skip 不再冒充成功。"""
+
+    created_episodes: int = 0
+    created_memories: int = 0
+    merged_memories: int = 0
+    superseded_memories: int = 0
+    archived_working: int = 0
+    skipped: list[dict[str, Any]] = field(default_factory=list)
+
+
 def _iso(value: datetime | None) -> str | None:
     return value.isoformat() if value else None
 
@@ -157,6 +173,12 @@ def _parse_datetime(value: Any) -> datetime | None:
         return datetime.fromisoformat(str(value))
     except ValueError:
         return None
+
+
+def _aware(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
 
 
 def _json_copy(value: Any) -> Any:
@@ -396,14 +418,21 @@ def _cluster_memories(db: Session, memories: Sequence[Memory]) -> list[list[Memo
             )
 
     ids = list(order)
+    by_id = {memory.id: memory for memory in memories}
     entity_rows = db.execute(
         select(MemoryEntity.memory_id, MemoryEntity.entity_id).where(
             MemoryEntity.memory_id.in_(ids)
         )
     ).all()
-    by_entity: dict[str, list[str]] = {}
+    # 实体分组同时按 workspace 分桶：脏数据（跨租户 memory_entity）也绝不跨租户聚类。
+    by_entity: dict[tuple[str, str], list[str]] = {}
     for memory_id, entity_id in entity_rows:
-        by_entity.setdefault(str(entity_id), []).append(str(memory_id))
+        memory = by_id.get(str(memory_id))
+        if memory is None:
+            continue
+        by_entity.setdefault((str(entity_id), memory.workspace_id), []).append(
+            str(memory_id)
+        )
     for members in by_entity.values():
         for member in members[1:]:
             union(members[0], member)
@@ -422,7 +451,6 @@ def _cluster_memories(db: Session, memories: Sequence[Memory]) -> list[list[Memo
     vectors: dict[str, list[float]] = {}
     for memory_id, _model, vector in embedding_rows:
         vectors.setdefault(str(memory_id), list(vector))
-    by_id = {memory.id: memory for memory in memories}
     vector_ids = sorted((mid for mid in vectors if mid in parent), key=order.get)
     for index, left in enumerate(vector_ids):
         for right in vector_ids[index + 1 :]:
@@ -468,9 +496,14 @@ def _find_candidates(
     content: str,
     entity_ids: Sequence[str],
     exclude_ids: Sequence[str],
-) -> list[tuple[Memory, float]]:
-    """合并/取代候选：同实体或 pg_trgm 相似度 ≥ 0.82 的当前语义记忆。"""
-    scored: dict[str, tuple[Memory, float]] = {}
+) -> list[tuple[Memory, float, bool]]:
+    """返回 ``(memory, similarity, strong)``。
+
+    - ``strong=True``：同实体或 pg_trgm 相似度 ≥ 0.82，可作为合并目标；
+    - ``strong=False``：仅用于让 :class:`RuleConflictJudge` 看到同 scope 的近期事实
+      （例如“北京 → 上海”），不能凭空成为合并目标。
+    """
+    scored: dict[str, tuple[Memory, float, bool]] = {}
     if entity_ids:
         statement = (
             select(Memory)
@@ -491,7 +524,7 @@ def _find_candidates(
         for memory in db.scalars(statement):
             if memory.id in exclude_ids:
                 continue
-            scored[memory.id] = (memory, 0.0)
+            scored[memory.id] = (memory, 0.0, True)
 
     repo = MemoryRepository(db)
     for memory, score in repo.find_similar(
@@ -503,11 +536,20 @@ def _find_candidates(
             continue
         previous = scored.get(memory.id)
         if previous is None or score > previous[1]:
-            scored[memory.id] = (memory, score)
+            scored[memory.id] = (memory, score, True)
+
+    # 与写入管线一致：补一批同 scope 的近期语义事实，让规则 judge 能看到
+    # “北京 → 上海”这类词面几乎不重叠、也没有实体的矛盾。它们只是冲突候选。
+    for memory in repo.find_active(
+        workspace_id, [(scope, scope_id)], "semantic", limit=5
+    ):
+        if memory.id in exclude_ids:
+            continue
+        scored.setdefault(memory.id, (memory, 0.0, False))
 
     return sorted(
         scored.values(),
-        key=lambda item: (item[1], item[0].importance),
+        key=lambda item: (item[2], item[1], item[0].importance),
         reverse=True,
     )
 
@@ -551,7 +593,7 @@ def _plan_facts(
             continue
 
         contradicting = None
-        for memory, _score in candidates:
+        for memory, _score, _strong in candidates:
             try:
                 if judge.is_contradiction(fact, memory.content) is True:
                     contradicting = memory
@@ -576,7 +618,22 @@ def _plan_facts(
             )
             continue
 
-        target, score = candidates[0]
+        merge_candidates = [item for item in candidates if item[2]]
+        if not merge_candidates:
+            actions.append(
+                {
+                    "action": "create",
+                    "content": fact,
+                    "workspace_id": workspace_id,
+                    "scope": scope,
+                    "scope_id": scope_id,
+                    "entity_ids": list(entity_ids),
+                    "derived_from": list(derived_from),
+                }
+            )
+            continue
+
+        target, score, _strong = merge_candidates[0]
         actions.append(
             {
                 "action": "merge",
@@ -594,7 +651,7 @@ def _plan_facts(
     return actions
 
 
-def _counts(plan: _Plan, *, episodes: int, archived: int) -> dict[str, int]:
+def _plan_counts(plan: _Plan, *, episodes: int, archived: int) -> dict[str, int]:
     return {
         "created_episodes": episodes,
         "created_memories": episodes + len(plan.creates) + len(plan.supersedes),
@@ -613,13 +670,33 @@ def _diff_from_plan(
     episodes: int,
     archived: int,
     dry_run: bool,
+    tally: _Tally | None = None,
+    job_run_ids: Sequence[str] = (),
 ) -> ConsolidationDiff:
-    counts = _counts(plan, episodes=episodes, archived=archived)
+    """dry-run 展示计划；正式运行使用实际写入 tally，skip 单独记录。"""
+    if tally is None:
+        counts = _plan_counts(plan, episodes=episodes, archived=archived)
+        for action in plan.actions:
+            action["status"] = "planned"
+            action.setdefault("conflict", False)
+        skipped: tuple[dict[str, Any], ...] = ()
+    else:
+        counts = {
+            "created_episodes": tally.created_episodes,
+            "created_memories": tally.created_memories,
+            "merged_memories": tally.merged_memories,
+            "superseded_memories": tally.superseded_memories,
+            "archived_working": tally.archived_working,
+            "clusters": plan.clusters,
+        }
+        skipped = tuple(dict(item) for item in tally.skipped)
     return ConsolidationDiff(
         job_run_id=job_id,
         job_type=job_type,
         dry_run=dry_run,
         actions=tuple(plan.actions),
+        skipped_actions=skipped,
+        job_run_ids=tuple(job_run_ids),
         **counts,
     )
 
@@ -997,7 +1074,7 @@ def _create_episode(
     working_count: int,
     action: dict[str, Any],
     actor: ActorRef,
-) -> tuple[Episode | None, Memory | None]:
+) -> tuple[Episode | None, Memory | None, bool]:
     """创建 episode 与对应 episodic 记忆；同 run 重放时跳过。"""
     existing = db.scalar(
         select(Episode).where(
@@ -1006,7 +1083,7 @@ def _create_episode(
         )
     )
     if existing is not None:
-        return existing, None
+        return existing, None, False
 
     started_at = _parse_datetime(action.get("started_at")) or session.started_at
     ended_at = _parse_datetime(action.get("ended_at")) or session.ended_at
@@ -1056,7 +1133,7 @@ def _create_episode(
         derived_from=action.get("derived_from", []),
         actor=actor,
     )
-    return episode, memory
+    return episode, memory, True
 
 
 def _apply_plan(
@@ -1066,24 +1143,30 @@ def _apply_plan(
     run_id: str,
     actor: ActorRef,
     episode_context: dict[str, Any] | None = None,
-) -> None:
+) -> _Tally:
+    tally = _Tally()
     for action in plan.actions:
         kind = action["action"]
+        status = "skipped"
         if kind == "episode":
-            if episode_context is None:
-                continue
-            _create_episode(
-                db,
-                run_id=run_id,
-                session=episode_context["session"],
-                summary=action["summary"],
-                cluster_count=action.get("cluster_count", 0),
-                working_count=action.get("working_count", 0),
-                action=action,
-                actor=actor,
-            )
+            if episode_context is not None:
+                _episode, memory, episode_created = _create_episode(
+                    db,
+                    run_id=run_id,
+                    session=episode_context["session"],
+                    summary=action["summary"],
+                    cluster_count=action.get("cluster_count", 0),
+                    working_count=action.get("working_count", 0),
+                    action=action,
+                    actor=actor,
+                )
+                if episode_created:
+                    tally.created_episodes += 1
+                if memory is not None:
+                    tally.created_memories += 1
+                status = "applied" if episode_created else "skipped"
         elif kind == "create":
-            _create_memory(
+            memory = _create_memory(
                 db,
                 run_id=run_id,
                 workspace_id=action["workspace_id"],
@@ -1098,15 +1181,41 @@ def _apply_plan(
                 derived_from=action.get("derived_from", []),
                 actor=actor,
             )
+            if memory is not None:
+                tally.created_memories += 1
+                status = "applied"
         elif kind == "merge":
-            _merge_memory(db, run_id=run_id, action=action, actor=actor)
+            if _merge_memory(db, run_id=run_id, action=action, actor=actor):
+                tally.merged_memories += 1
+                status = "applied"
         elif kind == "supersede":
-            _supersede_memory(db, run_id=run_id, action=action, actor=actor)
+            if _supersede_memory(db, run_id=run_id, action=action, actor=actor):
+                tally.created_memories += 1
+                tally.superseded_memories += 1
+                status = "applied"
         elif kind == "archive":
             memory = db.get(Memory, action["target_id"])
-            if memory is not None:
-                _archive_memory(db, run_id=run_id, memory=memory, actor=actor)
+            if (
+                memory is not None
+                and _archive_memory(db, run_id=run_id, memory=memory, actor=actor)
+            ):
+                tally.archived_working += 1
+                status = "applied"
+        else:
+            # nightly_mark 由夜间任务在事实写完后单独处理。
+            continue
+        action["status"] = status
+        if status == "skipped":
+            tally.skipped.append(
+                {
+                    "action": kind,
+                    "target_id": action.get("target_id"),
+                    "content": action.get("content"),
+                    "reason": "skipped",
+                }
+            )
     db.flush()
+    return tally
 
 
 # ---------------------------------------------------------------------------
@@ -1180,8 +1289,13 @@ def consolidate_session(
     *,
     workspace_id: str | None = None,
     actor: Any | None = None,
+    force: bool = False,
 ) -> ConsolidationDiff:
-    """把一个会话的工作记忆巩固为情景摘要与语义事实。"""
+    """把一个会话的工作记忆巩固为情景摘要与语义事实。
+
+    ``force=True`` 允许在相同窗口重跑（例如回滚后需要重新巩固），会派生新的
+    ``job_run``；默认仍按幂等键返回既有运行。
+    """
     session = _get_session(db, session_id)
     if workspace_id is not None and session.workspace_id != workspace_id:
         raise NotFoundError("会话不存在")
@@ -1189,9 +1303,27 @@ def consolidate_session(
     all_working = _working_memories(db, session, active_only=False)
     window_start, window_end = _session_window(session, all_working)
     scope = f"session:{session_id}"
-    job_id = job_id_for(
+    base_job_id = job_id_for(
         JOB_TYPE_CONSOLIDATE_SESSION, window_start, window_end, scope
     )
+    job_id = base_job_id
+    if force:
+        base_job = db.get(JobRun, base_job_id)
+        if base_job is not None and base_job.status in {"completed", "rolled_back"}:
+            attempt = db.scalar(
+                select(func.count())
+                .select_from(JobRun)
+                .where(
+                    JobRun.type == JOB_TYPE_CONSOLIDATE_SESSION,
+                    JobRun.scope == scope,
+                )
+            )
+            job_id = str(
+                uuid.uuid5(
+                    uuid.NAMESPACE_URL,
+                    f"{base_job_id}:force:{int(attempt or 0) + 1}",
+                )
+            )
     actor_ref = actor_fields(actor) if actor is not None else ("system", None)
     audit_actor_ref = ActorRef(*actor_ref)
 
@@ -1200,11 +1332,12 @@ def consolidate_session(
             job_run_id=None, job_type=JOB_TYPE_CONSOLIDATE_SESSION, dry_run=dry_run
         )
 
-    if not dry_run:
+    if not dry_run and not force:
         job = db.get(JobRun, job_id)
         if job is not None and job.status in {"completed", "rolled_back"}:
             return ConsolidationDiff(
                 job_run_id=job_id,
+                job_run_ids=(job_id,),
                 job_type=JOB_TYPE_CONSOLIDATE_SESSION,
                 dry_run=False,
                 replayed=True,
@@ -1268,6 +1401,7 @@ def consolidate_session(
         "window_end": _iso(window_end),
         "scope": scope,
         "dry_run": False,
+        "force": force,
     }
     job, replayed = _start_job(
         db,
@@ -1283,10 +1417,11 @@ def consolidate_session(
             job_run_id=job.id,
             job_type=JOB_TYPE_CONSOLIDATE_SESSION,
             replayed=True,
+            job_run_ids=(job.id,),
         )
 
     try:
-        _apply_plan(
+        tally = _apply_plan(
             db,
             plan,
             run_id=job.id,
@@ -1305,6 +1440,8 @@ def consolidate_session(
             episodes=1,
             archived=len(working),
             dry_run=False,
+            tally=tally,
+            job_run_ids=(job.id,),
         )
         _finish_job(
             db, job, diff, actor=audit_actor_ref, workspace_id=session.workspace_id
@@ -1328,11 +1465,12 @@ def _nightly_sources(
     db: Session,
     window_start: datetime,
     window_end: datetime,
-    workspace_id: str | None,
+    workspace_id: str,
 ) -> list[Memory]:
     statement = (
         select(Memory)
         .where(
+            Memory.workspace_id == workspace_id,
             Memory.type == "episodic",
             Memory.status == "active",
             Memory.deleted_at.is_(None),
@@ -1342,9 +1480,27 @@ def _nightly_sources(
         )
         .order_by(Memory.created_at.asc(), Memory.id.asc())
     )
-    if workspace_id is not None:
-        statement = statement.where(Memory.workspace_id == workspace_id)
     return list(db.scalars(statement))
+
+
+def nightly_workspace_ids(
+    db: Session, window_start: datetime, window_end: datetime
+) -> list[str]:
+    """窗口内存在未巩固 episodic 的 workspace；夜间任务逐 workspace 建 run。"""
+    statement = (
+        select(Memory.workspace_id)
+        .where(
+            Memory.type == "episodic",
+            Memory.status == "active",
+            Memory.deleted_at.is_(None),
+            Memory.created_at >= window_start,
+            Memory.created_at <= window_end,
+            not_(Memory.metadata_.has_key("nightly_consolidation_run_id")),
+        )
+        .distinct()
+        .order_by(Memory.workspace_id)
+    )
+    return [str(value) for value in db.scalars(statement)]
 
 
 def _pick_scope(memories: Sequence[Memory]) -> tuple[str, str | None]:
@@ -1355,36 +1511,71 @@ def _pick_scope(memories: Sequence[Memory]) -> tuple[str, str | None]:
     return max(counts.items(), key=lambda item: item[1])[0]
 
 
-def consolidate_nightly(
+def _aggregate_diffs(
+    diffs: Sequence[ConsolidationDiff], *, dry_run: bool
+) -> ConsolidationDiff:
+    """把逐 workspace 的结果合并成一个响应；每个 workspace 保留自己的 job。"""
+    job_ids: list[str] = []
+    actions: list[dict[str, Any]] = []
+    skipped: list[dict[str, Any]] = []
+    totals = {
+        "created_episodes": 0,
+        "created_memories": 0,
+        "merged_memories": 0,
+        "superseded_memories": 0,
+        "archived_working": 0,
+        "clusters": 0,
+    }
+    replayed = True
+    for diff in diffs:
+        ids = diff.job_run_ids or (
+            (diff.job_run_id,) if diff.job_run_id is not None else ()
+        )
+        job_ids.extend(ids)
+        actions.extend(dict(action) for action in diff.actions)
+        skipped.extend(dict(item) for item in diff.skipped_actions)
+        for key in totals:
+            totals[key] += getattr(diff, key)
+        replayed = replayed and diff.replayed
+    return ConsolidationDiff(
+        job_run_id=job_ids[0] if len(job_ids) == 1 else None,
+        job_run_ids=tuple(job_ids),
+        job_type=JOB_TYPE_CONSOLIDATE_NIGHTLY,
+        dry_run=dry_run,
+        replayed=replayed if diffs else False,
+        actions=tuple(actions),
+        skipped_actions=tuple(skipped),
+        **totals,
+    )
+
+
+def _consolidate_nightly_workspace(
     db: Session,
     window_start: datetime,
     window_end: datetime,
-    scope: str | None = None,
-    dry_run: bool = False,
     *,
-    actor: Any | None = None,
+    workspace_id: str,
+    dry_run: bool,
+    actor: ActorRef,
 ) -> ConsolidationDiff:
-    """把窗口内未巩固的 episodic 按簇抽象为语义事实（簇 ≥ 3 才处理）。"""
-    if window_end <= window_start:
-        raise BadRequestError("window_end 必须晚于 window_start", code="invalid_window")
-    job_scope = scope or "all"
-    workspace_filter = scope if scope not in (None, "all") else None
+    """单个 workspace 的夜间巩固；job_run.scope / params 都用真实 workspace id。"""
     job_id = job_id_for(
-        JOB_TYPE_CONSOLIDATE_NIGHTLY, window_start, window_end, job_scope
+        JOB_TYPE_CONSOLIDATE_NIGHTLY,
+        window_start,
+        window_end,
+        workspace_id,
     )
-    actor_ref = actor_fields(actor) if actor is not None else ("system", None)
-    audit_actor_ref = ActorRef(*actor_ref)
-
     if not dry_run:
         job = db.get(JobRun, job_id)
         if job is not None and job.status in {"completed", "rolled_back"}:
             return ConsolidationDiff(
                 job_run_id=job_id,
+                job_run_ids=(job_id,),
                 job_type=JOB_TYPE_CONSOLIDATE_NIGHTLY,
                 replayed=True,
             )
 
-    sources = _nightly_sources(db, window_start, window_end, workspace_filter)
+    sources = _nightly_sources(db, window_start, window_end, workspace_id)
     clusters = [
         cluster
         for cluster in _cluster_memories(db, sources)
@@ -1402,7 +1593,7 @@ def consolidate_nightly(
         plan.actions.extend(
             _plan_facts(
                 db,
-                workspace_id=cluster[0].workspace_id,
+                workspace_id=workspace_id,
                 scope=cluster_scope,
                 scope_id=cluster_scope_id,
                 facts=facts,
@@ -1429,12 +1620,11 @@ def consolidate_nightly(
             dry_run=True,
         )
 
-    workspace_ids = {memory.workspace_id for memory in sources}
     params = {
-        "workspace_id": workspace_filter or "all",
+        "workspace_id": workspace_id,
         "window_start": _iso(window_start),
         "window_end": _iso(window_end),
-        "scope": job_scope,
+        "scope": workspace_id,
         "dry_run": False,
         "source_count": len(sources),
         "cluster_count": len(clusters),
@@ -1443,21 +1633,25 @@ def consolidate_nightly(
         db,
         job_id=job_id,
         job_type=JOB_TYPE_CONSOLIDATE_NIGHTLY,
-        scope=job_scope,
+        scope=workspace_id,
         params=params,
-        actor=audit_actor_ref,
-        workspace_id=workspace_filter or "all",
+        actor=actor,
+        workspace_id=workspace_id,
     )
     if replayed:
         return ConsolidationDiff(
-            job_run_id=job.id, job_type=JOB_TYPE_CONSOLIDATE_NIGHTLY, replayed=True
+            job_run_id=job.id,
+            job_run_ids=(job.id,),
+            job_type=JOB_TYPE_CONSOLIDATE_NIGHTLY,
+            replayed=True,
         )
 
     try:
-        _apply_plan(db, plan, run_id=job.id, actor=audit_actor_ref)
+        tally = _apply_plan(db, plan, run_id=job.id, actor=actor)
         for action in plan.actions:
             if action["action"] != "nightly_mark":
                 continue
+            applied = 0
             for memory_id in action["target_ids"]:
                 memory = db.get(Memory, memory_id)
                 if memory is None or memory.status != "active":
@@ -1476,10 +1670,20 @@ def consolidate_nightly(
                     memory,
                     run_id=job.id,
                     before=before,
-                    actor=audit_actor_ref,
+                    actor=actor,
                     detail={"action": "nightly_source"},
                 )
                 emit_memory_event(db, memory, "updated")
+                applied += 1
+            action["status"] = "applied" if applied else "skipped"
+            if not applied:
+                tally.skipped.append(
+                    {
+                        "action": "nightly_mark",
+                        "target_ids": list(action["target_ids"]),
+                        "reason": "sources_not_active",
+                    }
+                )
         db.flush()
         diff = _diff_from_plan(
             plan,
@@ -1488,14 +1692,10 @@ def consolidate_nightly(
             episodes=0,
             archived=0,
             dry_run=False,
+            tally=tally,
+            job_run_ids=(job.id,),
         )
-        _finish_job(
-            db,
-            job,
-            diff,
-            actor=audit_actor_ref,
-            workspace_id=workspace_filter or (next(iter(workspace_ids), "all")),
-        )
+        _finish_job(db, job, diff, actor=actor, workspace_id=workspace_id)
         return diff
     except Exception as exc:
         db.rollback()
@@ -1504,6 +1704,56 @@ def consolidate_nightly(
         except Exception:  # 记录失败不能掩盖原始错误
             logger.exception("failed to mark consolidation job failed")
         raise
+
+
+def consolidate_nightly(
+    db: Session,
+    window_start: datetime,
+    window_end: datetime,
+    scope: str | None = None,
+    dry_run: bool = False,
+    *,
+    actor: Any | None = None,
+) -> ConsolidationDiff:
+    """把窗口内未巩固的 episodic 按簇抽象为语义事实（簇 ≥ 3 才处理）。
+
+    ``scope`` 为空/``all`` 时按 workspace 逐个执行：每个 workspace 一个
+    ``job_run``（`scope` 与 `params.workspace_id` 都是真实 id），不会产生
+    `workspace_id="all"` 的任务，租户 Key 可各自查看与回滚。
+    """
+    if window_end <= window_start:
+        raise BadRequestError("window_end 必须晚于 window_start", code="invalid_window")
+    actor_ref = ActorRef(*actor_fields(actor)) if actor is not None else ActorRef("system")
+
+    if scope not in (None, "", "all"):
+        return _consolidate_nightly_workspace(
+            db,
+            window_start,
+            window_end,
+            workspace_id=str(scope),
+            dry_run=dry_run,
+            actor=actor_ref,
+        )
+
+    workspace_ids = nightly_workspace_ids(db, window_start, window_end)
+    if not workspace_ids:
+        return ConsolidationDiff(
+            job_run_id=None,
+            job_type=JOB_TYPE_CONSOLIDATE_NIGHTLY,
+            dry_run=dry_run,
+        )
+    diffs = [
+        _consolidate_nightly_workspace(
+            db,
+            window_start,
+            window_end,
+            workspace_id=workspace_id,
+            dry_run=dry_run,
+            actor=actor_ref,
+        )
+        for workspace_id in workspace_ids
+    ]
+    return _aggregate_diffs(diffs, dry_run=dry_run)
 
 
 # ---------------------------------------------------------------------------
@@ -1569,15 +1819,42 @@ def rollback_run(
     )
 
     seen: set[str] = set()
-    created: list[str] = []
-    restored: list[str] = []
+    checked: list[tuple[AuditLog, Memory]] = []
+    conflicts: list[str] = []
     for entry in audits:
         if entry.target_id in seen:
             continue
         seen.add(entry.target_id)
         memory = db.get(Memory, entry.target_id)
         if memory is None:
+            # 巩固后记忆被硬删除，无法安全恢复。
+            conflicts.append(entry.target_id)
             continue
+        expected_version = (entry.after or {}).get("version")
+        if expected_version is None or int(memory.version) != int(expected_version):
+            # 巩固之后被编辑/软删/再次合并：整次回滚拒绝，避免静默覆盖。
+            conflicts.append(entry.target_id)
+            continue
+        if job.finished_at is not None and entry.created_at > job.finished_at:
+            conflicts.append(entry.target_id)
+            continue
+        checked.append((entry, memory))
+
+    if job.finished_at is None:
+        conflicts.append(job.id)
+    if conflicts:
+        raise ConflictError(
+            "回滚冲突：巩固后记忆已被修改",
+            code="rollback_conflict",
+            details={
+                "job_run_id": job_run_id,
+                "conflict_ids": sorted(set(conflicts)),
+            },
+        )
+
+    created: list[str] = []
+    restored: list[str] = []
+    for entry, memory in checked:
         if entry.before is None:
             created.append(entry.target_id)
             metadata = dict(memory.metadata_ or {})
@@ -1648,7 +1925,11 @@ def find_sessions_to_consolidate(
     idle_minutes: int | None = None,
     limit: int = 50,
 ) -> list[str]:
-    """会话已结束或工作记忆空闲超过阈值，且仍有 active 工作记忆。"""
+    """会话已结束或工作记忆空闲超过阈值，且仍有 active 工作记忆。
+
+    最新巩固运行已回滚/失败且窗口内没有新活动时不再入队，避免回滚后每轮
+    扫描都重复选中同一会话、饿死其他会话。
+    """
     now = now or utcnow()
     if idle_minutes is None:
         idle_minutes = get_current_settings().consolidation_idle_minutes
@@ -1665,7 +1946,7 @@ def find_sessions_to_consolidate(
         .group_by(Memory.scope_id)
     ).subquery()
     rows = db.execute(
-        select(active.c.scope_id)
+        select(active.c.scope_id, active.c.last_at)
         .join(
             SessionModel,
             SessionModel.id == active.c.scope_id,
@@ -1679,7 +1960,28 @@ def find_sessions_to_consolidate(
         .order_by(active.c.last_at.asc())
         .limit(limit)
     ).all()
-    return [str(row[0]) for row in rows]
+    result: list[str] = []
+    for session_id, last_at in rows:
+        latest = db.scalar(
+            select(JobRun)
+            .where(
+                JobRun.type == JOB_TYPE_CONSOLIDATE_SESSION,
+                JobRun.params["session_id"].astext == str(session_id),
+            )
+            .order_by(JobRun.created_at.desc(), JobRun.id.desc())
+            .limit(1)
+        )
+        if latest is not None and latest.status in {"rolled_back", "failed"}:
+            window_end = _aware(
+                _parse_datetime((latest.params or {}).get("window_end"))
+            )
+            # 回滚/失败后工作记忆恢复 active 但窗口未变：没有新活动就不再反复入队。
+            if window_end is None or (
+                last_at is not None and _aware(last_at) <= window_end
+            ):
+                continue
+        result.append(str(session_id))
+    return result
 
 
 __all__ = [
@@ -1694,6 +1996,7 @@ __all__ = [
     "job_channel",
     "job_id_for",
     "mark_job_failed",
+    "nightly_workspace_ids",
     "rollback_run",
     "session_job_id",
 ]

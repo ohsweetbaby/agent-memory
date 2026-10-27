@@ -733,10 +733,28 @@ def consolidate_nightly(
     )
     runtime = get_runtime()
     try:
+        if scope:
+            with runtime.session_scope() as db:
+                return service.consolidate_nightly(
+                    db, start, end, scope=scope
+                ).to_dict()
+        # beat 不建跨租户任务：逐 workspace 建独立 job_run，失败互不影响。
         with runtime.session_scope() as db:
-            return service.consolidate_nightly(
-                db, start, end, scope=scope
-            ).to_dict()
+            workspace_ids = service.nightly_workspace_ids(db, start, end)
+        results: dict[str, Any] = {}
+        for workspace_id in workspace_ids:
+            try:
+                with runtime.session_scope() as db:
+                    results[workspace_id] = service.consolidate_nightly(
+                        db, start, end, scope=workspace_id
+                    ).to_dict()
+            except Exception:
+                logger.exception(
+                    "nightly consolidation failed",
+                    extra={"workspace_id": workspace_id},
+                )
+                results[workspace_id] = {"error": "consolidation_failed"}
+        return {"workspaces": results}
     except Retry:
         raise
     except Exception as exc:
