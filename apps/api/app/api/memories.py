@@ -12,8 +12,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Response
 from pydantic import BaseModel, Field
-from sqlalchemy import delete as sa_delete
-from sqlalchemy import select, update as sa_update
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from memory_core.types import Scope
@@ -64,6 +63,18 @@ class FeedbackRequest(BaseModel):
 class MergeRequest(BaseModel):
     source_ids: list[str] = Field(min_length=1)
     target_id: str
+
+
+class ForgetRequest(BaseModel):
+    """按查询条件批量遗忘；管理员会话可跨 workspace。"""
+
+    query: str = Field(min_length=1, max_length=500)
+    scope: str | None = None
+    scope_id: str | None = Field(default=None, max_length=36)
+    memory_type: str | None = Field(default=None, alias="type")
+    workspace_id: str | None = Field(default=None, max_length=36)
+    hard: bool = False
+    confirm: bool = False
 
 
 def require_write(context: AuthContext = Depends(require_auth)) -> AuthContext:
@@ -124,6 +135,102 @@ def _audit_snapshot(memory: Memory) -> dict[str, Any]:
     }
 
 
+def _history_payload(
+    session: Session, memory: Memory
+) -> list[dict[str, Any]]:
+    """沿 ``superseded_by`` 反向收集被取代链，最旧的一条在前。"""
+    history: list[dict[str, Any]] = []
+    seen = {memory.id}
+    current = memory
+    while len(history) < MAX_HISTORY_ITEMS:
+        previous = session.scalars(
+            select(Memory)
+            .where(
+                Memory.workspace_id == memory.workspace_id,
+                Memory.superseded_by == current.id,
+                Memory.id != current.id,
+            )
+            .order_by(Memory.created_at.asc(), Memory.id.asc())
+        ).first()
+        if previous is None or previous.id in seen:
+            break
+        seen.add(previous.id)
+        history.insert(0, _memory_payload(previous))
+        current = previous
+    return history
+
+
+def _links_payload(session: Session, memory: Memory) -> list[dict[str, Any]]:
+    """返回与当前记忆直接相连的边，含出边与入边。"""
+    rows = session.scalars(
+        select(MemoryLink)
+        .where(
+            or_(
+                MemoryLink.from_id == memory.id,
+                MemoryLink.to_id == memory.id,
+            )
+        )
+        .order_by(MemoryLink.created_at.asc(), MemoryLink.id.asc())
+    ).all()
+    return [
+        {
+            "id": link.id,
+            "from_id": link.from_id,
+            "to_id": link.to_id,
+            "relation": link.relation,
+            "weight": link.weight,
+            "evidence": link.evidence,
+        }
+        for link in rows
+    ]
+
+
+def _migrate_links(
+    session: Session, source_id: str, target_id: str
+) -> None:
+    """把 source 的边迁到 target。
+
+    只处理 source 关联的边；与 target 已有等价边重复时删除 source 边，
+    迁移后产生的自环也一并删除。绝不全局删除 ``memory_link``。
+    """
+    if source_id == target_id:
+        return
+
+    source_links = list(
+        session.scalars(
+            select(MemoryLink).where(
+                or_(
+                    MemoryLink.from_id == source_id,
+                    MemoryLink.to_id == source_id,
+                )
+            )
+        )
+    )
+    existing = {
+        (link.from_id, link.to_id, link.relation)
+        for link in session.scalars(
+            select(MemoryLink).where(
+                or_(
+                    MemoryLink.from_id == target_id,
+                    MemoryLink.to_id == target_id,
+                )
+            )
+        )
+    }
+
+    for link in source_links:
+        new_from = target_id if link.from_id == source_id else link.from_id
+        new_to = target_id if link.to_id == source_id else link.to_id
+        key = (new_from, new_to, link.relation)
+        if new_from == new_to or key in existing:
+            session.delete(link)
+            continue
+        existing.add(key)
+        link.from_id = new_from
+        link.to_id = new_to
+    session.flush()
+
+
 @router.get("")
 def list_memories(
     workspace_id: str | None = Query(default=None, max_length=36),
@@ -132,6 +239,8 @@ def list_memories(
     status: str | None = Query(default=None),
     min_importance: float | None = Query(default=None, ge=0.0, le=1.0),
     q: str | None = Query(default=None, max_length=500),
+    include_history: bool = Query(default=False),
+    include_archived: bool = Query(default=False),
     limit: int = Query(default=DEFAULT_PAGE_SIZE),
     cursor: str | None = Query(default=None),
     context: AuthContext = Depends(require_scope("read")),
@@ -149,10 +258,22 @@ def list_memories(
         statement = statement.where(Memory.scope == scope)
     if status is not None:
         statement = statement.where(Memory.status == status)
+    else:
+        if not include_archived:
+            statement = statement.where(Memory.status != "archived")
+        if not include_history:
+            statement = statement.where(Memory.status != "superseded")
     if min_importance is not None:
         statement = statement.where(Memory.importance >= min_importance)
     if q and q.strip():
         statement = statement.where(Memory.content.ilike(f"%{q.strip()}%"))
+    # ``status=active`` 不代表“当前有效”；默认排除 valid_to 已过期的记忆。
+    # 显式请求 superseded 时不再按有效期裁剪，否则历史条目永远查不到。
+    if not include_history and status != "superseded":
+        now = utcnow()
+        statement = statement.where(
+            or_(Memory.valid_to.is_(None), Memory.valid_to > now)
+        )
 
     items, next_cursor = paginate(
         session, statement, Memory, limit=limit, cursor=cursor
@@ -234,20 +355,8 @@ def merge_memories(
         )
         emit_memory_event(session, source, "merged")
 
-        # 把 source 的关联迁移到 target；迁移后清理自环。
-        session.execute(
-            sa_update(MemoryLink)
-            .where(MemoryLink.from_id == source.id)
-            .values(from_id=target.id)
-        )
-        session.execute(
-            sa_update(MemoryLink)
-            .where(MemoryLink.to_id == source.id)
-            .values(to_id=target.id)
-        )
-        session.execute(
-            sa_delete(MemoryLink).where(MemoryLink.from_id == MemoryLink.to_id)
-        )
+        # 只迁移 source 的边，避免全局删除；重复边与自环就地清理。
+        _migrate_links(session, source.id, target.id)
 
         access_count += source.access_count
         evidence.append(
@@ -283,13 +392,113 @@ def merge_memories(
     return _memory_payload(target)
 
 
+@router.delete("")
+def forget_memories(
+    payload: ForgetRequest,
+    context: AuthContext = Depends(require_write),
+    session: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """按查询条件批量遗忘；默认软删，硬删必须 admin + confirm。"""
+    query = payload.query.strip()
+    if not query:
+        raise BadRequestError("query 不能为空", code="invalid_request")
+
+    resolved = workspace_filter(context, payload.workspace_id)
+    if resolved is not None:
+        ensure_workspace(session, context, resolved)
+
+    if payload.hard and (
+        not payload.confirm or not context.has_scope("admin")
+    ):
+        raise BadRequestError(
+            "硬删除需要 admin 权限且 confirm=true",
+            code="confirmation_required",
+        )
+
+    statement = select(Memory).where(
+        Memory.deleted_at.is_(None), Memory.status != "deleted"
+    )
+    if resolved is not None:
+        statement = statement.where(Memory.workspace_id == resolved)
+    if payload.scope is not None:
+        statement = statement.where(Memory.scope == payload.scope)
+    if payload.scope_id is not None:
+        statement = statement.where(Memory.scope_id == payload.scope_id)
+    if payload.memory_type is not None:
+        statement = statement.where(Memory.type == payload.memory_type)
+    statement = statement.where(Memory.content.ilike(f"%{query}%"))
+    statement = statement.order_by(Memory.created_at.asc(), Memory.id.asc())
+
+    memories = list(session.scalars(statement))
+    if not memories:
+        return {"affected": 0, "ids": []}
+
+    actor_type, actor_id = audit_actor(context)
+    affected: list[str] = []
+    for memory in memories:
+        affected.append(memory.id)
+        before = _audit_snapshot(memory)
+        if payload.hard:
+            memory_id_value = memory.id
+            workspace_id = memory.workspace_id
+            version = memory.version
+            session.delete(memory)
+            session.flush()
+            write_audit(
+                session,
+                action="memory.deleted",
+                target_type="memory",
+                target_id=memory_id_value,
+                workspace_id=workspace_id,
+                actor_type=actor_type,
+                actor_id=actor_id,
+                before=before,
+                after={"hard": True, "query": query},
+            )
+            OutboxRepository(session).add(
+                "memory.deleted",
+                memory_id_value,
+                {
+                    "memory_id": memory_id_value,
+                    "version": version,
+                    "workspace_id": workspace_id,
+                    "action": "deleted",
+                    "hard": True,
+                },
+            )
+            continue
+
+        MemoryRepository(session).update(
+            memory, status="deleted", deleted_at=utcnow()
+        )
+        write_audit(
+            session,
+            action="memory.deleted",
+            target_type="memory",
+            target_id=memory.id,
+            workspace_id=memory.workspace_id,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            before=before,
+            after={**_audit_snapshot(memory), "query": query},
+        )
+        emit_memory_event(session, memory, "deleted", deleted=True)
+
+    session.commit()
+    return {"affected": len(affected), "ids": affected}
+
+
 @router.get("/{memory_id}")
 def get_memory(
     memory_id: str,
     context: AuthContext = Depends(require_scope("read")),
     session: Session = Depends(get_db),
 ) -> dict[str, Any]:
-    return _memory_payload(_load_memory(session, context, memory_id))
+    memory = _load_memory(session, context, memory_id)
+    body = _memory_payload(memory)
+    body["history"] = _history_payload(session, memory)
+    body["links"] = _links_payload(session, memory)
+    return body
 
 
 @router.patch("/{memory_id}")
@@ -369,12 +578,11 @@ def delete_memory(
     version = memory.version
 
     if hard:
-        if not confirm:
+        if not confirm or not context.has_scope("admin"):
             raise BadRequestError(
-                "硬删除需要 confirm=true", code="confirmation_required"
+                "硬删除需要 admin 权限且 confirm=true",
+                code="confirmation_required",
             )
-        if not context.has_scope("admin"):
-            raise ForbiddenError("硬删除需要 admin 权限", code="insufficient_scope")
         memory_id_value = memory.id
         workspace_id = memory.workspace_id
         session.delete(memory)
