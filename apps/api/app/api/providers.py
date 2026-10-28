@@ -10,6 +10,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import ipaddress
 import logging
 import time
 from typing import Any
@@ -45,6 +47,29 @@ router = APIRouter(prefix="/api/v1/providers", tags=["providers"])
 
 #: 只探测 OpenAI 兼容的模型列表；其他 404 时仅在缺少 /v1 时尝试补一次。
 _MODELS_PATH = "/models"
+
+#: 云厂商 metadata 服务主机名；loopback/私网仍允许（本地 Ollama）。
+_METADATA_HOSTNAMES = frozenset(
+    {
+        "metadata",
+        "metadata.google.internal",
+        "metadata.goog",
+        "instance-data",
+        "instance-data.ec2.internal",
+        "metadata.azure.internal",
+        "metadata.oraclecloud.com",
+        "metadata.alibabacloud.com",
+        "metadata.tencentyun.com",
+    }
+)
+
+#: 非 link-local 但已知的云 metadata 地址（阿里云/EC2 IPv6）。
+_METADATA_ADDRESSES = frozenset(
+    {
+        ipaddress.ip_address("100.100.100.200"),
+        ipaddress.ip_address("fd00:ec2::254"),
+    }
+)
 
 
 def _provider_payload(provider: ProviderConfig) -> dict[str, Any]:
@@ -99,6 +124,40 @@ def _normalize_base_url(raw: str | None) -> str:
     return text
 
 
+def _is_blocked_address(address: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    """禁止 link-local 与已知 metadata 地址；loopback/私网按需求保留。"""
+    candidates: list[ipaddress.IPv4Address | ipaddress.IPv6Address] = [address]
+    if isinstance(address, ipaddress.IPv6Address) and address.ipv4_mapped is not None:
+        candidates.append(address.ipv4_mapped)
+    return any(
+        candidate.is_link_local or candidate in _METADATA_ADDRESSES
+        for candidate in candidates
+    )
+
+
+def _validate_probe_target(base_url: str) -> None:
+    """探测前的 SSRF 防线：拒绝 link-local 与云 metadata。
+
+    loopback 与 RFC1918 私网明确保留，供本地 Ollama/企业内网使用。
+    """
+    host = (urlsplit(base_url).hostname or "").strip().lower().rstrip(".")
+    if not host:
+        raise BadRequestError("Base URL 缺少主机名", code="invalid_base_url")
+    if host in _METADATA_HOSTNAMES:
+        raise BadRequestError(
+            "禁止探测云 metadata 地址", code="blocked_probe_target"
+        )
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        # 普通域名：保持可用；不在这里做 DNS 解析，避免额外等待与 DNS 重绑定竞态。
+        return
+    if _is_blocked_address(address):
+        raise BadRequestError(
+            "禁止探测 link-local 或云 metadata 地址", code="blocked_probe_target"
+        )
+
+
 def _probe_urls(base_url: str) -> list[str]:
     base = base_url.rstrip("/")
     if base.endswith(_MODELS_PATH):
@@ -122,6 +181,7 @@ async def probe_provider(base_url: str, api_key: str | None) -> ProviderTestResu
     """对 OpenAI 兼容服务执行真实 HTTP 探测，总耗时不超过 5 秒。"""
     try:
         base = _normalize_base_url(base_url)
+        _validate_probe_target(base)
     except BadRequestError as exc:
         return ProviderTestResult(
             ok=False,
@@ -136,6 +196,7 @@ async def probe_provider(base_url: str, api_key: str | None) -> ProviderTestResu
         headers["Authorization"] = f"Bearer {api_key}"
 
     timeout = httpx.Timeout(PROVIDER_TEST_TIMEOUT_SECONDS)
+    candidates = _probe_urls(base)
     last_status: int | None = None
     try:
         async with httpx.AsyncClient(
@@ -143,7 +204,7 @@ async def probe_provider(base_url: str, api_key: str | None) -> ProviderTestResu
             follow_redirects=False,
             trust_env=False,
         ) as client:
-            for index, url in enumerate(_probe_urls(base)):
+            for index, url in enumerate(candidates):
                 remaining = deadline - time.perf_counter()
                 if remaining <= 0:
                     return _failure(
@@ -152,12 +213,14 @@ async def probe_provider(base_url: str, api_key: str | None) -> ProviderTestResu
                         last_status,
                     )
                 try:
-                    response = await client.get(
-                        url,
-                        headers=headers,
-                        timeout=httpx.Timeout(remaining),
-                    )
-                except httpx.TimeoutException:
+                    # asyncio.timeout 是硬边界：连接、发送、读取响应体都受它约束。
+                    async with asyncio.timeout(remaining):
+                        response = await client.get(
+                            url,
+                            headers=headers,
+                            timeout=httpx.Timeout(remaining),
+                        )
+                except (TimeoutError, httpx.TimeoutException):
                     return _failure("连接失败：请求超时（5 秒）", started, last_status)
                 except httpx.HTTPError:
                     return _failure(
@@ -167,12 +230,18 @@ async def probe_provider(base_url: str, api_key: str | None) -> ProviderTestResu
                     )
 
                 last_status = response.status_code
-                if response.status_code < 400:
+                if 200 <= response.status_code < 300:
                     return ProviderTestResult(
                         ok=True,
                         message="连接成功",
                         latency_ms=round((time.perf_counter() - started) * 1000, 2),
                         status_code=response.status_code,
+                    )
+                if 300 <= response.status_code < 400:
+                    return _failure(
+                        f"连接失败：目标服务返回重定向（HTTP {response.status_code}），请填写最终 Base URL",
+                        started,
+                        response.status_code,
                     )
                 if response.status_code in {401, 403}:
                     return _failure(
@@ -180,7 +249,7 @@ async def probe_provider(base_url: str, api_key: str | None) -> ProviderTestResu
                         started,
                         response.status_code,
                     )
-                if response.status_code == 404 and index < len(_probe_urls(base)) - 1:
+                if response.status_code == 404 and index < len(candidates) - 1:
                     continue
                 return _failure(
                     f"连接失败：服务返回 HTTP {response.status_code}",
@@ -210,6 +279,30 @@ def _apply_secret(provider: ProviderConfig, api_key: str | None) -> None:
         # 留空表示不修改已保存的密钥。
         return
     provider.encrypted_secret = encrypt_secret(text)
+
+
+def _record_test_audit(
+    session: Session,
+    context: AuthContext,
+    target_id: str,
+    result: ProviderTestResult,
+) -> None:
+    """记录连通性测试结果（成功/失败都写），只保留结果字段，不含密钥。"""
+    actor_type, actor_id = audit_actor(context)
+    write_audit(
+        session,
+        action="provider.tested",
+        target_type="provider",
+        target_id=target_id,
+        actor_type=actor_type,
+        actor_id=actor_id,
+        after={
+            "ok": result.ok,
+            "status_code": result.status_code,
+            "latency_ms": result.latency_ms,
+        },
+    )
+    session.commit()
 
 
 @router.get("")
@@ -369,29 +462,50 @@ async def test_provider_draft(
     context: AuthContext = Depends(require_scope("admin")),
     session: Session = Depends(get_db),
 ) -> ProviderTestResult:
-    """未保存表单的连通性测试；已有 Provider 可复用其加密密钥。"""
+    """未保存表单的连通性测试；复用已存密钥时强制使用已保存的 Base URL。"""
     stored: ProviderConfig | None = None
     if payload.provider_id:
         stored = _load_provider(session, payload.provider_id)
-    base_url = payload.base_url or (stored.base_url if stored is not None else None)
-    if not base_url:
-        return ProviderTestResult(
-            ok=False,
-            message="连接失败：请先填写 Base URL",
-            latency_ms=0.0,
-        )
+    target_id = stored.id if stored is not None else "draft"
 
     api_key = (payload.api_key or "").strip()
     if not api_key and stored is not None and stored.encrypted_secret is not None:
         try:
             api_key = decrypt_secret(stored.encrypted_secret)
         except Exception:  # 密文损坏/密钥轮换
-            return ProviderTestResult(
+            result = ProviderTestResult(
                 ok=False,
                 message="连接失败：已保存的密钥无法解密，请重新填写",
                 latency_ms=0.0,
             )
-    return await probe_provider(base_url, api_key or None)
+            _record_test_audit(session, context, target_id, result)
+            return result
+        # 安全边界：已存密钥只能发往它绑定的 Base URL，忽略请求里的覆盖值。
+        base_url = stored.base_url
+        if not base_url:
+            result = ProviderTestResult(
+                ok=False,
+                message="连接失败：Provider 未配置 Base URL",
+                latency_ms=0.0,
+            )
+            _record_test_audit(session, context, target_id, result)
+            return result
+    else:
+        base_url = payload.base_url or (
+            stored.base_url if stored is not None else None
+        )
+        if not base_url:
+            result = ProviderTestResult(
+                ok=False,
+                message="连接失败：请先填写 Base URL",
+                latency_ms=0.0,
+            )
+            _record_test_audit(session, context, target_id, result)
+            return result
+
+    result = await probe_provider(base_url, api_key or None)
+    _record_test_audit(session, context, target_id, result)
+    return result
 
 
 @router.post("/{provider_id}/test")
@@ -402,22 +516,28 @@ async def test_provider(
 ) -> ProviderTestResult:
     provider = _load_provider(session, provider_id)
     if not provider.base_url:
-        return ProviderTestResult(
+        result = ProviderTestResult(
             ok=False,
             message="连接失败：Provider 未配置 Base URL",
             latency_ms=0.0,
         )
+        _record_test_audit(session, context, provider.id, result)
+        return result
     api_key: str | None = None
     if provider.encrypted_secret is not None:
         try:
             api_key = decrypt_secret(provider.encrypted_secret)
         except Exception:
-            return ProviderTestResult(
+            result = ProviderTestResult(
                 ok=False,
                 message="连接失败：已保存的密钥无法解密，请重新填写",
                 latency_ms=0.0,
             )
-    return await probe_provider(provider.base_url, api_key)
+            _record_test_audit(session, context, provider.id, result)
+            return result
+    result = await probe_provider(provider.base_url, api_key)
+    _record_test_audit(session, context, provider.id, result)
+    return result
 
 
 __all__ = ["probe_provider", "router"]
