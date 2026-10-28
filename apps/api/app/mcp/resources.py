@@ -18,10 +18,11 @@ from urllib.parse import unquote
 from mcp.server.fastmcp import FastMCP
 from mcp.shared.exceptions import McpError
 from mcp.types import ErrorData
-from sqlalchemy import select
+from sqlalchemy import or_, select
 
 from app.api.memories import _load_memory
 from app.models import Entity, Memory, MemoryEntity
+from app.models.base import utcnow
 from app.mcp.services import (
     ERR_NOT_FOUND,
     McpServices,
@@ -115,6 +116,7 @@ def register_resources(server: FastMCP, services: McpServices) -> None:
                         Memory.workspace_id == workspace_id,
                         Memory.status == "active",
                         Memory.deleted_at.is_(None),
+                        or_(Memory.valid_to.is_(None), Memory.valid_to > utcnow()),
                     )
                     .order_by(Memory.created_at.desc(), Memory.id.desc())
                     .limit(RECENT_LIMIT)

@@ -50,6 +50,7 @@ docker compose -f infra/docker-compose.yml ps
 
 1. 打开 <http://localhost:8080/setup>，创建管理员。
 2. 登录后进入「设置」→ 新建 Provider，点击「测试连接」。
+   M1 的运行时模型仍以 `.env` 的 `EMBEDDING_*` / `LLM_*` 为准；Provider 页面用于保存与校验端点，切换模型时同步修改 `.env` 并重启 api/worker。
 3. 新建一个 API Key（明文只展示一次，请立即复制）。
 4. 进入「记忆」写入几条内容，或执行 `make seed` 生成演示数据。
 

@@ -200,3 +200,19 @@ def test_negative_budget_is_rejected():
 
 def test_empty_items_return_empty_context():
     assert assemble_context([]) == ("", [])
+
+
+def test_negation_and_single_char_location_changes_are_not_collapsed():
+    items = [
+        make_item("allergy", "用户对花生过敏", importance=0.9),
+        make_item("not-allergy", "用户对花生不过敏", importance=0.8),
+        make_item("beijing", "用户住在北京", importance=0.7),
+        make_item("nanjing", "用户住在南京", importance=0.6),
+    ]
+    _, kept = assemble_context(items)
+    assert {item.id for item in kept} == {
+        "allergy",
+        "not-allergy",
+        "beijing",
+        "nanjing",
+    }

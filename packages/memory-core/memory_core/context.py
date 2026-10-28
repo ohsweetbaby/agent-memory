@@ -197,9 +197,15 @@ def _is_near_duplicate(left: str, right: str) -> bool:
     b = _normalize(right)
     if not a or not b:
         return a == b
+    # 否定词是事实语义的分水岭，不能当作“插入的修饰词”折叠。
+    if _has_negation(a) != _has_negation(b):
+        return False
     if a in b or b in a:
         return True
     if min(len(a), len(b)) < 4:
+        return False
+    # 等长且只差一个字时，中文里往往就是完全不同的事实（北京/南京）。
+    if len(a) == len(b) and sum(x != y for x, y in zip(a, b)) == 1:
         return False
 
     shorter, longer = (a, b) if len(a) <= len(b) else (b, a)
@@ -209,6 +215,13 @@ def _is_near_duplicate(left: str, right: str) -> bool:
         return True
 
     return _edit_distance(a, b) / len(longer) <= NEAR_DUPLICATE_EDIT_RATIO
+
+
+_NEGATION_MARKERS = ("不", "没", "无", "未", "别", "非")
+
+
+def _has_negation(text: str) -> bool:
+    return any(marker in text for marker in _NEGATION_MARKERS)
 
 
 def _is_subsequence(shorter: str, longer: str) -> bool:

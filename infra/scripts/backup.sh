@@ -6,6 +6,12 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+if [[ -f "$ROOT/.env" ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source "$ROOT/.env"
+  set +a
+fi
 COMPOSE_FILE="$ROOT/infra/docker-compose.yml"
 ENV_ARGS=()
 if [[ -f "$ROOT/.env" ]]; then
