@@ -12,7 +12,7 @@ import asyncio
 import hashlib
 import logging
 import math
-import random
+import re
 import threading
 from typing import Any
 
@@ -25,6 +25,9 @@ logger = logging.getLogger(__name__)
 _LOCAL_PROVIDERS = {"local", "sentence-transformers", "sentence_transformers", "st"}
 _FAKE_PROVIDERS = {"fake", "stub", "test", "deterministic"}
 
+_CJK_RUN = re.compile(r"[\u4e00-\u9fff]+")
+_WORD_FEATURE = re.compile(r"[a-z0-9_]+")
+
 
 def _normalize(values: list[float]) -> list[float]:
     """L2 归一化；零向量保持为零，避免除零。"""
@@ -35,7 +38,13 @@ def _normalize(values: list[float]) -> list[float]:
 
 
 class FakeEmbedding:
-    """按文本哈希生成确定性单位向量。"""
+    """确定性词面哈希嵌入：共享词/汉字的文本余弦更高。
+
+    早期实现用整段文本哈希成随机向量，只能验证“确定性”，无法支撑黄金集
+    的检索质量基线。这里改为可复现的 feature hashing（中文二元组 + 单字，
+    英文/数字整词），不依赖模型或网络，同一文本永远得到同一向量，且相似
+    文本不会因哈希随机性而互相淹没。它仍只用于测试与本地开发。
+    """
 
     provider = "fake"
 
@@ -54,10 +63,39 @@ class FakeEmbedding:
     def identity(self) -> str:
         return f"{self.provider}:{self.name}"
 
+    def _features(self, text: str) -> list[tuple[str, float]]:
+        """提取可哈希特征；CJK 用二元组，单字作弱特征，英文保留整词。"""
+        lowered = text.casefold()
+        features: list[tuple[str, float]] = []
+        for run in _CJK_RUN.findall(lowered):
+            if len(run) == 1:
+                features.append((run, 1.0))
+                continue
+            features.extend((run[index : index + 2], 1.0) for index in range(len(run) - 1))
+            features.extend((char, 0.35) for char in run)
+        features.extend((word, 1.0) for word in _WORD_FEATURE.findall(lowered))
+        return features
+
     def _vector(self, text: str) -> list[float]:
-        digest = hashlib.blake2b(text.encode("utf-8"), digest_size=8).digest()
-        rng = random.Random(int.from_bytes(digest, "big"))
-        return _normalize([rng.uniform(-1.0, 1.0) for _ in range(self.dim)])
+        vector = [0.0] * self.dim
+        features = self._features(text)
+        if not features:
+            # 标点/空白等无特征文本仍需要稳定且互不相同的向量。
+            digest = hashlib.blake2b(text.encode("utf-8"), digest_size=8).digest()
+            features = [(digest.hex(), 1.0)]
+        for feature, weight in features:
+            digest = hashlib.blake2b(feature.encode("utf-8"), digest_size=8).digest()
+            value = int.from_bytes(digest, "big")
+            index = value % self.dim
+            sign = 1.0 if (value >> 63) & 1 else -1.0
+            vector[index] += sign * weight
+        # 极端哈希碰撞导致零向量时退回文本哈希，保证单位长度约定。
+        if not any(vector):
+            digest = hashlib.blake2b(text.encode("utf-8"), digest_size=8).digest()
+            value = int.from_bytes(digest, "big")
+            index = value % self.dim
+            vector[index] = 1.0 if value & 1 else -1.0
+        return _normalize(vector)
 
     def embed_sync(self, texts: list[str]) -> list[list[float]]:
         """同步入口；供脚本与测试直接比较确定性。"""

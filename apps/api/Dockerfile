@@ -18,7 +18,12 @@ WORKDIR /app
 COPY pyproject.toml uv.lock ./
 COPY apps/api/pyproject.toml apps/api/pyproject.toml
 COPY apps/api/app apps/api/app
-# stdio 薄桥与 API 同属 uv workspace；manifest 缺失会让 workspace 解析失败。
+# 迁移脚本随镜像发布，运维可在容器内执行 alembic。
+COPY apps/api/alembic.ini apps/api/alembic.ini
+COPY apps/api/alembic apps/api/alembic
+# API 依赖 memory-core；stdio 薄桥同属 uv workspace，manifest 缺失会让解析失败。
+COPY packages/memory-core/pyproject.toml packages/memory-core/pyproject.toml
+COPY packages/memory-core/memory_core packages/memory-core/memory_core
 COPY packages/mcp-stdio/pyproject.toml packages/mcp-stdio/pyproject.toml
 COPY packages/mcp-stdio/memory_mcp packages/mcp-stdio/memory_mcp
 

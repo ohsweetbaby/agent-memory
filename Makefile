@@ -31,4 +31,4 @@ backup:
 	bash infra/scripts/backup.sh
 
 restore:
-	bash infra/scripts/restore.sh $(BACKUP)
+	bash infra/scripts/restore.sh $(BACKUP) $(ARGS)

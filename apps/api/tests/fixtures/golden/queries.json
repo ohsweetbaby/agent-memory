@@ -1,0 +1,2249 @@
+{
+  "version": 1,
+  "queries": [
+    {
+      "id": "q001",
+      "query": "林舟住在哪里？",
+      "category": "single_hop",
+      "expected_keys": [
+        "m002"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": "u_lin",
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q002",
+      "query": "林舟的猫叫什么名字？",
+      "category": "single_hop",
+      "expected_keys": [
+        "m003"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": "u_lin",
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q003",
+      "query": "林舟对什么食物过敏？",
+      "category": "single_hop",
+      "expected_keys": [
+        "m005"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": "u_lin",
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q004",
+      "query": "林舟的代码审查习惯是什么？",
+      "category": "single_hop",
+      "expected_keys": [
+        "m008"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": "u_lin",
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q005",
+      "query": "宋雨负责哪个平台？",
+      "category": "single_hop",
+      "expected_keys": [
+        "m009"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": "u_song",
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q006",
+      "query": "宋雨喜欢喝什么咖啡？",
+      "category": "single_hop",
+      "expected_keys": [
+        "m011"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": "u_song",
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q007",
+      "query": "宋雨每周三做什么？",
+      "category": "single_hop",
+      "expected_keys": [
+        "m013"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": "u_song",
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q008",
+      "query": "陈恺负责什么项目？",
+      "category": "single_hop",
+      "expected_keys": [
+        "m015"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": "u_chen",
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q009",
+      "query": "陈恺怎么通勤？",
+      "category": "single_hop",
+      "expected_keys": [
+        "m016"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": "u_chen",
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q010",
+      "query": "周悦用什么设计工具？",
+      "category": "single_hop",
+      "expected_keys": [
+        "m023"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": "u_zhou",
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q011",
+      "query": "周悦的工作室在哪里？",
+      "category": "single_hop",
+      "expected_keys": [
+        "m021"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": "u_zhou",
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q012",
+      "query": "苏禾的研究方向是什么？",
+      "category": "single_hop",
+      "expected_keys": [
+        "m024"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": "u_su",
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q013",
+      "query": "Atlas 用什么数据库作为事实源？",
+      "category": "single_hop",
+      "expected_keys": [
+        "m026"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": null,
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q014",
+      "query": "Atlas 的向量索引存在哪里？",
+      "category": "single_hop",
+      "expected_keys": [
+        "m027"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": null,
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q015",
+      "query": "Atlas 用什么存实体关系图？",
+      "category": "single_hop",
+      "expected_keys": [
+        "m028"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": null,
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q016",
+      "query": "Atlas 的任务队列基于什么？",
+      "category": "single_hop",
+      "expected_keys": [
+        "m029"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": null,
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q017",
+      "query": "Atlas 的检索融合算法是什么？",
+      "category": "single_hop",
+      "expected_keys": [
+        "m031"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": null,
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q018",
+      "query": "Atlas 的默认上下文预算是多少？",
+      "category": "single_hop",
+      "expected_keys": [
+        "m032"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": null,
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q019",
+      "query": "Atlas 的 API 框架是什么？",
+      "category": "single_hop",
+      "expected_keys": [
+        "m033"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": null,
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q020",
+      "query": "Nova 管理台用什么框架？",
+      "category": "single_hop",
+      "expected_keys": [
+        "m036"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": null,
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q021",
+      "query": "Lakehouse 用什么表格式？",
+      "category": "single_hop",
+      "expected_keys": [
+        "m041"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": null,
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q022",
+      "query": "Lakehouse 的计算引擎是什么？",
+      "category": "single_hop",
+      "expected_keys": [
+        "m042"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": null,
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q023",
+      "query": "品牌改版的主色是什么？",
+      "category": "single_hop",
+      "expected_keys": [
+        "m046"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": null,
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q024",
+      "query": "中文信息抽取课题的基线模型是什么？",
+      "category": "single_hop",
+      "expected_keys": [
+        "m049"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": null,
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q025",
+      "query": "林舟负责的检索服务依赖哪些存储？",
+      "category": "multi_hop",
+      "expected_keys": [
+        "m057"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": "u_lin",
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q026",
+      "query": "Atlas 的 outbox 由谁消费？",
+      "category": "multi_hop",
+      "expected_keys": [
+        "m067"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": null,
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q027",
+      "query": "Celery worker 的 broker 是什么？",
+      "category": "multi_hop",
+      "expected_keys": [
+        "m068"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": null,
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q028",
+      "query": "检索服务融合阶段会调用什么图数据库？",
+      "category": "multi_hop",
+      "expected_keys": [
+        "m069"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": null,
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q029",
+      "query": "Neo4j 图扩展最多走几跳？",
+      "category": "multi_hop",
+      "expected_keys": [
+        "m070"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": null,
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q030",
+      "query": "Nova 管理台调用哪个接口展示记忆详情？",
+      "category": "multi_hop",
+      "expected_keys": [
+        "m071"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": null,
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q031",
+      "query": "Lakehouse 的 Trino 查询读取什么表格式？",
+      "category": "multi_hop",
+      "expected_keys": [
+        "m072"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": null,
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q032",
+      "query": "品牌官网改版用什么组件库？",
+      "category": "multi_hop",
+      "expected_keys": [
+        "m073"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": null,
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q033",
+      "query": "中文信息抽取课题的基线模型在哪里训练？",
+      "category": "multi_hop",
+      "expected_keys": [
+        "m074"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": null,
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q034",
+      "query": "A100 集群由谁维护？",
+      "category": "multi_hop",
+      "expected_keys": [
+        "m075"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": null,
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q035",
+      "query": "宋雨在 Nova 负责什么？",
+      "category": "multi_hop",
+      "expected_keys": [
+        "m058"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": "u_song",
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q036",
+      "query": "Nova 的增长实验依赖什么数据？",
+      "category": "multi_hop",
+      "expected_keys": [
+        "m059"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": null,
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q037",
+      "query": "陈恺在 Lakehouse 负责什么？",
+      "category": "multi_hop",
+      "expected_keys": [
+        "m060"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": "u_chen",
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q038",
+      "query": "Lakehouse 的指标层依赖什么？",
+      "category": "multi_hop",
+      "expected_keys": [
+        "m061"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": null,
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q039",
+      "query": "周悦在品牌改版负责什么？",
+      "category": "multi_hop",
+      "expected_keys": [
+        "m062"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": "u_zhou",
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q040",
+      "query": "品牌改版的视觉规范包含什么？",
+      "category": "multi_hop",
+      "expected_keys": [
+        "m063"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": null,
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q041",
+      "query": "苏禾的导师是谁？",
+      "category": "multi_hop",
+      "expected_keys": [
+        "m064"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": "u_su",
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q042",
+      "query": "王教授指导哪个课题？",
+      "category": "multi_hop",
+      "expected_keys": [
+        "m065"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": null,
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q043",
+      "query": "林舟什么时候把检索服务超时调到 10 秒？",
+      "category": "temporal",
+      "expected_keys": [
+        "m076"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": "u_lin",
+      "session_id": "s_lin_atlas_0312",
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q044",
+      "query": "Atlas 第一次四路召回联调是什么时候？",
+      "category": "temporal",
+      "expected_keys": [
+        "m077"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": "u_lin",
+      "session_id": "s_lin_atlas_0312",
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q045",
+      "query": "宋雨什么时候上线城市维度的灰度实验？",
+      "category": "temporal",
+      "expected_keys": [
+        "m078"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": "u_song",
+      "session_id": "s_song_nova_0408",
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q046",
+      "query": "宋雨什么时候把实验指标改为七日留存？",
+      "category": "temporal",
+      "expected_keys": [
+        "m079"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": "u_song",
+      "session_id": "s_song_nova_0408",
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q047",
+      "query": "陈恺什么时候修复了分区倾斜？",
+      "category": "temporal",
+      "expected_keys": [
+        "m080"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": "u_chen",
+      "session_id": "s_chen_lake_0506",
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q048",
+      "query": "陈恺什么时候把 Trino 扩到 12 节点？",
+      "category": "temporal",
+      "expected_keys": [
+        "m081"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": "u_chen",
+      "session_id": "s_chen_lake_0506",
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q049",
+      "query": "周悦什么时候交付第一版视觉稿？",
+      "category": "temporal",
+      "expected_keys": [
+        "m082"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": "u_zhou",
+      "session_id": "s_zhou_brand_0602",
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q050",
+      "query": "苏禾什么时候完成标注样本清洗？",
+      "category": "temporal",
+      "expected_keys": [
+        "m084"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": "u_su",
+      "session_id": "s_su_nlp_0701",
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q051",
+      "query": "苏禾的实体识别基线 F1 什么时候达到 0.87？",
+      "category": "temporal",
+      "expected_keys": [
+        "m085"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": "u_su",
+      "session_id": "s_su_nlp_0701",
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q052",
+      "query": "Atlas 的 P95 延迟什么时候降到 260 毫秒？",
+      "category": "temporal",
+      "expected_keys": [
+        "m087"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": "u_lin",
+      "session_id": "s_lin_atlas_0312",
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q053",
+      "query": "团队什么时候决定升级 Neo4j 5.26？",
+      "category": "temporal",
+      "expected_keys": [
+        "m088"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": null,
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q054",
+      "query": "Nova 灰度实验的复盘结论是什么？",
+      "category": "temporal",
+      "expected_keys": [
+        "m090"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": "u_song",
+      "session_id": "s_song_nova_0408",
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q055",
+      "query": "陈恺什么时候把每日对账改到凌晨两点？",
+      "category": "temporal",
+      "expected_keys": [
+        "m091"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": "u_chen",
+      "session_id": "s_chen_lake_0506",
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q056",
+      "query": "Atlas 什么时候通过 1 万条记忆的压测？",
+      "category": "temporal",
+      "expected_keys": [
+        "m096"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": "u_lin",
+      "session_id": "s_lin_atlas_0312",
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q057",
+      "query": "团队什么时候确定 M1 发布计划？",
+      "category": "temporal",
+      "expected_keys": [
+        "m100"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": null,
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q058",
+      "query": "林舟什么时候完成备份恢复演练？",
+      "category": "temporal",
+      "expected_keys": [
+        "m101"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": "u_lin",
+      "session_id": "s_lin_atlas_0312",
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q059",
+      "query": "林舟现在住在哪里？",
+      "category": "contradiction",
+      "expected_keys": [
+        "m107"
+      ],
+      "stale_keys": [
+        "m106"
+      ],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": "u_lin",
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q060",
+      "query": "林舟的工位现在在哪里？",
+      "category": "contradiction",
+      "expected_keys": [
+        "m109"
+      ],
+      "stale_keys": [
+        "m108"
+      ],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": "u_lin",
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q061",
+      "query": "宋雨现在向谁汇报？",
+      "category": "contradiction",
+      "expected_keys": [
+        "m111"
+      ],
+      "stale_keys": [
+        "m110"
+      ],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": "u_song",
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q062",
+      "query": "陈恺的团队现在有多少人？",
+      "category": "contradiction",
+      "expected_keys": [
+        "m113"
+      ],
+      "stale_keys": [
+        "m112"
+      ],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": "u_chen",
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q063",
+      "query": "周悦的生日是哪天？",
+      "category": "contradiction",
+      "expected_keys": [
+        "m115"
+      ],
+      "stale_keys": [
+        "m114"
+      ],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": "u_zhou",
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q064",
+      "query": "Atlas 的向量维度现在是多少？",
+      "category": "contradiction",
+      "expected_keys": [
+        "m117"
+      ],
+      "stale_keys": [
+        "m116"
+      ],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": null,
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q065",
+      "query": "Atlas 的关键词检索现在怎么做？",
+      "category": "contradiction",
+      "expected_keys": [
+        "m119"
+      ],
+      "stale_keys": [
+        "m118"
+      ],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": null,
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q066",
+      "query": "Nova 的灰度比例现在是多少？",
+      "category": "contradiction",
+      "expected_keys": [
+        "m121"
+      ],
+      "stale_keys": [
+        "m120"
+      ],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": null,
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q067",
+      "query": "Lakehouse 的保留周期现在是多久？",
+      "category": "contradiction",
+      "expected_keys": [
+        "m123"
+      ],
+      "stale_keys": [
+        "m122"
+      ],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": null,
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q068",
+      "query": "苏禾的学号是多少？",
+      "category": "contradiction",
+      "expected_keys": [
+        "m125"
+      ],
+      "stale_keys": [
+        "m124"
+      ],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": "u_su",
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q069",
+      "query": "品牌改版的交付日期是什么时候？",
+      "category": "contradiction",
+      "expected_keys": [
+        "m127"
+      ],
+      "stale_keys": [
+        "m126"
+      ],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": null,
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q070",
+      "query": "团队周会现在是什么时候？",
+      "category": "contradiction",
+      "expected_keys": [
+        "m129"
+      ],
+      "stale_keys": [
+        "m128"
+      ],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": null,
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q071",
+      "query": "林舟吃辣吗？",
+      "category": "negation",
+      "expected_keys": [
+        "m004"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": "u_lin",
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q072",
+      "query": "林舟喝咖啡吗？",
+      "category": "negation",
+      "expected_keys": [
+        "m130"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": "u_lin",
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q073",
+      "query": "宋雨吃香菜吗？",
+      "category": "negation",
+      "expected_keys": [
+        "m131"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": "u_song",
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q074",
+      "query": "陈恺吃牛肉吗？",
+      "category": "negation",
+      "expected_keys": [
+        "m132"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": "u_chen",
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q075",
+      "query": "周悦对花粉过敏吗？",
+      "category": "negation",
+      "expected_keys": [
+        "m133"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": "u_zhou",
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q076",
+      "query": "苏禾养宠物吗？",
+      "category": "negation",
+      "expected_keys": [
+        "m134"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": "u_su",
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q077",
+      "query": "林舟会开车吗？",
+      "category": "negation",
+      "expected_keys": [
+        "m135"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": "u_lin",
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q078",
+      "query": "宋雨用微信处理工作吗？",
+      "category": "negation",
+      "expected_keys": [
+        "m136"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": "u_song",
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q079",
+      "query": "陈恺周末加班吗？",
+      "category": "negation",
+      "expected_keys": [
+        "m137"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": "u_chen",
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q080",
+      "query": "周悦喝含糖饮料吗？",
+      "category": "negation",
+      "expected_keys": [
+        "m138"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": "u_zhou",
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q081",
+      "query": "苏禾擅长公开演讲吗？",
+      "category": "negation",
+      "expected_keys": [
+        "m139"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": "u_su",
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q082",
+      "query": "Atlas 支持跨 workspace 检索吗？",
+      "category": "negation",
+      "expected_keys": [
+        "m140"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": null,
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q083",
+      "query": "Nova 会自动修改实验分组吗？",
+      "category": "negation",
+      "expected_keys": [
+        "m141"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": null,
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q084",
+      "query": "Lakehouse 会长期存储原始日志吗？",
+      "category": "negation",
+      "expected_keys": [
+        "m142"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": null,
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q085",
+      "query": "品牌改版使用渐变背景吗？",
+      "category": "negation",
+      "expected_keys": [
+        "m143"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": null,
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q086",
+      "query": "团队允许在周五下午发布生产变更吗？",
+      "category": "negation",
+      "expected_keys": [
+        "m144"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": null,
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q087",
+      "query": "规划 Agent 拆解任务的要求是什么？",
+      "category": "scope",
+      "expected_keys": [
+        "m146"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [
+        "m147",
+        "m148",
+        "m149",
+        "m150"
+      ],
+      "agent_id": "agent_planner",
+      "end_user_id": null,
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q088",
+      "query": "编码 Agent 提交代码前要做什么？",
+      "category": "scope",
+      "expected_keys": [
+        "m147"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [
+        "m146",
+        "m148"
+      ],
+      "agent_id": "agent_coder",
+      "end_user_id": null,
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q089",
+      "query": "编码 Agent 能使用全局可变状态吗？",
+      "category": "scope",
+      "expected_keys": [
+        "m161"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [
+        "m146",
+        "m150"
+      ],
+      "agent_id": "agent_coder",
+      "end_user_id": null,
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q090",
+      "query": "研究 Agent 引用资料的要求是什么？",
+      "category": "scope",
+      "expected_keys": [
+        "m148"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [
+        "m147",
+        "m149"
+      ],
+      "agent_id": "agent_researcher",
+      "end_user_id": null,
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q091",
+      "query": "研究 Agent 会抓取登录页面吗？",
+      "category": "scope",
+      "expected_keys": [
+        "m162"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [
+        "m147",
+        "m161"
+      ],
+      "agent_id": "agent_researcher",
+      "end_user_id": null,
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q092",
+      "query": "运维 Agent 重建索引前要确认什么？",
+      "category": "scope",
+      "expected_keys": [
+        "m149"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [
+        "m146",
+        "m147"
+      ],
+      "agent_id": "agent_ops",
+      "end_user_id": null,
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q093",
+      "query": "辅导 Agent 怎么解释概念？",
+      "category": "scope",
+      "expected_keys": [
+        "m150"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [
+        "m146",
+        "m147"
+      ],
+      "agent_id": "agent_tutor",
+      "end_user_id": null,
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q094",
+      "query": "这次联调关注什么？",
+      "category": "scope",
+      "expected_keys": [
+        "m151"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [
+        "m152",
+        "m153"
+      ],
+      "agent_id": null,
+      "end_user_id": null,
+      "session_id": "s_lin_atlas_0312",
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q095",
+      "query": "本次评审讨论什么？",
+      "category": "scope",
+      "expected_keys": [
+        "m152"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [
+        "m151",
+        "m153"
+      ],
+      "agent_id": null,
+      "end_user_id": null,
+      "session_id": "s_song_nova_0408",
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q096",
+      "query": "这次排查只看什么？",
+      "category": "scope",
+      "expected_keys": [
+        "m153"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [
+        "m151",
+        "m152"
+      ],
+      "agent_id": null,
+      "end_user_id": null,
+      "session_id": "s_chen_lake_0506",
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q097",
+      "query": "今天确认哪些设计项？",
+      "category": "scope",
+      "expected_keys": [
+        "m154"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [
+        "m151",
+        "m152"
+      ],
+      "agent_id": null,
+      "end_user_id": null,
+      "session_id": "s_zhou_brand_0602",
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q098",
+      "query": "本次实验比较哪些基线？",
+      "category": "scope",
+      "expected_keys": [
+        "m155"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [
+        "m151",
+        "m153"
+      ],
+      "agent_id": null,
+      "end_user_id": null,
+      "session_id": "s_su_nlp_0701",
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q099",
+      "query": "林舟的默认检索模式偏好是什么？",
+      "category": "scope",
+      "expected_keys": [
+        "m156"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": "u_lin",
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q100",
+      "query": "宋雨的默认上下文预算偏好是多少？",
+      "category": "scope",
+      "expected_keys": [
+        "m157"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": "u_song",
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q101",
+      "query": "陈恺偏好什么导出格式？",
+      "category": "scope",
+      "expected_keys": [
+        "m158"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": "u_chen",
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q102",
+      "query": "周悦希望搜索结果怎么展示？",
+      "category": "scope",
+      "expected_keys": [
+        "m159"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": "u_zhou",
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q103",
+      "query": "苏禾希望错误信息包含什么？",
+      "category": "scope",
+      "expected_keys": [
+        "m160"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": "u_su",
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q104",
+      "query": "所有服务健康检查有什么要求？",
+      "category": "scope",
+      "expected_keys": [
+        "m145"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": null,
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q105",
+      "query": "导出文件多久自动清理？",
+      "category": "scope",
+      "expected_keys": [
+        "m163"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": null,
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q106",
+      "query": "API Key 默认权限是什么？",
+      "category": "scope",
+      "expected_keys": [
+        "m164"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": null,
+      "session_id": null,
+      "scopes": null,
+      "types": null,
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q107",
+      "query": "发布流程是什么？",
+      "category": "procedural",
+      "expected_keys": [
+        "m165"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": null,
+      "session_id": null,
+      "scopes": null,
+      "types": [
+        "procedural"
+      ],
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q108",
+      "query": "数据库迁移流程是什么？",
+      "category": "procedural",
+      "expected_keys": [
+        "m166"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": null,
+      "session_id": null,
+      "scopes": null,
+      "types": [
+        "procedural"
+      ],
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q109",
+      "query": "重建索引流程是什么？",
+      "category": "procedural",
+      "expected_keys": [
+        "m167"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": null,
+      "session_id": null,
+      "scopes": null,
+      "types": [
+        "procedural"
+      ],
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q110",
+      "query": "备份流程是什么？",
+      "category": "procedural",
+      "expected_keys": [
+        "m168"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": null,
+      "session_id": null,
+      "scopes": null,
+      "types": [
+        "procedural"
+      ],
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q111",
+      "query": "恢复流程是什么？",
+      "category": "procedural",
+      "expected_keys": [
+        "m169"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": null,
+      "session_id": null,
+      "scopes": null,
+      "types": [
+        "procedural"
+      ],
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q112",
+      "query": "Qdrant 不可用时怎么排查？",
+      "category": "procedural",
+      "expected_keys": [
+        "m170"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": null,
+      "session_id": null,
+      "scopes": null,
+      "types": [
+        "procedural"
+      ],
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q113",
+      "query": "Neo4j 启动慢怎么处理？",
+      "category": "procedural",
+      "expected_keys": [
+        "m171"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": null,
+      "session_id": null,
+      "scopes": null,
+      "types": [
+        "procedural"
+      ],
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q114",
+      "query": "数据库迁移失败怎么处理？",
+      "category": "procedural",
+      "expected_keys": [
+        "m172"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": null,
+      "session_id": null,
+      "scopes": null,
+      "types": [
+        "procedural"
+      ],
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q115",
+      "query": "磁盘满了怎么办？",
+      "category": "procedural",
+      "expected_keys": [
+        "m173"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": null,
+      "session_id": null,
+      "scopes": null,
+      "types": [
+        "procedural"
+      ],
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q116",
+      "query": "新增记忆类型的流程是什么？",
+      "category": "procedural",
+      "expected_keys": [
+        "m174"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": null,
+      "session_id": null,
+      "scopes": null,
+      "types": [
+        "procedural"
+      ],
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q117",
+      "query": "代码审查流程是什么？",
+      "category": "procedural",
+      "expected_keys": [
+        "m175"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": null,
+      "session_id": null,
+      "scopes": null,
+      "types": [
+        "procedural"
+      ],
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q118",
+      "query": "事故响应流程是什么？",
+      "category": "procedural",
+      "expected_keys": [
+        "m176"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": null,
+      "session_id": null,
+      "scopes": null,
+      "types": [
+        "procedural"
+      ],
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q119",
+      "query": "发布回滚流程是什么？",
+      "category": "procedural",
+      "expected_keys": [
+        "m177"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": null,
+      "session_id": null,
+      "scopes": null,
+      "types": [
+        "procedural"
+      ],
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q120",
+      "query": "密钥轮换流程是什么？",
+      "category": "procedural",
+      "expected_keys": [
+        "m178"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": null,
+      "session_id": null,
+      "scopes": null,
+      "types": [
+        "procedural"
+      ],
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q121",
+      "query": "数据导出流程是什么？",
+      "category": "procedural",
+      "expected_keys": [
+        "m179"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": null,
+      "session_id": null,
+      "scopes": null,
+      "types": [
+        "procedural"
+      ],
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q122",
+      "query": "导出文件清理流程是什么？",
+      "category": "procedural",
+      "expected_keys": [
+        "m180"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": null,
+      "session_id": null,
+      "scopes": null,
+      "types": [
+        "procedural"
+      ],
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q123",
+      "query": "测试数据准备流程是什么？",
+      "category": "procedural",
+      "expected_keys": [
+        "m181"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": null,
+      "session_id": null,
+      "scopes": null,
+      "types": [
+        "procedural"
+      ],
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q124",
+      "query": "黄金集评测流程是什么？",
+      "category": "procedural",
+      "expected_keys": [
+        "m182"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": null,
+      "session_id": null,
+      "scopes": null,
+      "types": [
+        "procedural"
+      ],
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q125",
+      "query": "性能压测流程是什么？",
+      "category": "procedural",
+      "expected_keys": [
+        "m183"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": null,
+      "session_id": null,
+      "scopes": null,
+      "types": [
+        "procedural"
+      ],
+      "mode": "balanced",
+      "limit": 10
+    },
+    {
+      "id": "q126",
+      "query": "Provider 探测流程是什么？",
+      "category": "procedural",
+      "expected_keys": [
+        "m184"
+      ],
+      "stale_keys": [],
+      "forbidden_keys": [],
+      "agent_id": null,
+      "end_user_id": null,
+      "session_id": null,
+      "scopes": null,
+      "types": [
+        "procedural"
+      ],
+      "mode": "balanced",
+      "limit": 10
+    }
+  ]
+}

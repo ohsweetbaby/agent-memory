@@ -233,6 +233,116 @@ class Neo4jIndex:
         node["entity_ids"] = [value for value in record["entity_ids"] if value]
         return node
 
+    def upsert_many(
+        self,
+        records: Sequence[
+            tuple[Any, Sequence[GraphEntity], Sequence[GraphLink]]
+        ],
+        *,
+        batch_size: int = 500,
+    ) -> int:
+        """批量投影记忆、实体与 RELATED_TO 边。
+
+        用于评测/压测的大规模数据准备；逐条 ``upsert_memory`` 会为每条记忆
+        产生多次往返。语义与 ``upsert_memory`` 的 M1 子集一致（不处理
+        SUPERSEDES/Episode 扩展），仍全部使用 MERGE，可安全重跑。
+        """
+        if not records:
+            return 0
+        self._ensure_schema()
+
+        rows: list[dict[str, Any]] = []
+        for memory, entities, links in records:
+            rows.append(
+                {
+                    "id": memory.id,
+                    "workspace_id": memory.workspace_id,
+                    "props": {
+                        "id": memory.id,
+                        "workspace_id": memory.workspace_id,
+                        "type": memory.type,
+                        "scope": memory.scope,
+                        "scope_id": memory.scope_id,
+                        "status": memory.status,
+                        "importance": float(memory.importance or 0.0),
+                        "valid_to": _iso(memory.valid_to),
+                        "last_reinforced_at": _iso(memory.last_reinforced_at),
+                    },
+                    "entities": [
+                        {
+                            "id": entity.id,
+                            "name": entity.name,
+                            "type": entity.type,
+                            "role": entity.role,
+                        }
+                        for entity in entities
+                    ],
+                    "links": [
+                        {
+                            "from_id": link.from_id,
+                            "to_id": link.to_id,
+                            "relation": link.relation,
+                            "weight": float(link.weight),
+                            "evidence": (
+                                json.dumps(link.evidence, ensure_ascii=False)
+                                if link.evidence is not None
+                                else None
+                            ),
+                        }
+                        for link in links
+                    ],
+                }
+            )
+
+        total = 0
+        with self._driver.session(database=self.database) as session:
+            for start in range(0, len(rows), max(1, batch_size)):
+                chunk = rows[start : start + batch_size]
+                session.run(
+                    "UNWIND $rows AS row "
+                    "MERGE (m:Memory {id: row.id}) SET m += row.props",
+                    rows=chunk,
+                ).consume()
+                session.run(
+                    """
+                    UNWIND $rows AS row
+                    UNWIND row.entities AS entity
+                    MERGE (e:Entity {id: entity.id})
+                    SET e.name = entity.name,
+                        e.workspace_id = row.workspace_id
+                    SET e.type = coalesce(entity.type, e.type)
+                    """,
+                    rows=chunk,
+                ).consume()
+                session.run(
+                    """
+                    UNWIND $rows AS row
+                    UNWIND row.entities AS entity
+                    MATCH (m:Memory {id: row.id})
+                    MATCH (e:Entity {id: entity.id})
+                    MERGE (m)-[r:MENTIONS]->(e)
+                    SET r.role = entity.role
+                    """,
+                    rows=chunk,
+                ).consume()
+                session.run(
+                    """
+                    UNWIND $rows AS row
+                    UNWIND row.links AS link
+                    MERGE (a:Memory {id: link.from_id})
+                    MERGE (b:Memory {id: link.to_id})
+                    MERGE (a)-[r:RELATED_TO]->(b)
+                    SET r.relation = link.relation,
+                        r.weight = link.weight,
+                        r.evidence = link.evidence
+                    """,
+                    rows=chunk,
+                ).consume()
+                total += len(chunk)
+
+        logger.info("memory batch projected to neo4j", extra={"count": total})
+        return total
+
     def delete(self, memory_id: str) -> None:
         with self._driver.session(database=self.database) as session:
             session.run(

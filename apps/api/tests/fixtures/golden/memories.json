@@ -1,0 +1,4352 @@
+{
+  "version": 1,
+  "workspace": "ws_golden",
+  "memories": [
+    {
+      "key": "m001",
+      "content": "林舟是后端工程师，负责 Atlas 记忆服务的 API 开发。",
+      "type": "semantic",
+      "scope": "user",
+      "scope_id": "u_lin",
+      "importance": 0.8,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "林舟",
+        "Atlas"
+      ],
+      "metadata": {
+        "source_quote": "林舟是后端工程师，负责 Atlas 记忆服务的 API 开发。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m002",
+      "content": "林舟住在上海，通勤到张江大约四十分钟。",
+      "type": "semantic",
+      "scope": "user",
+      "scope_id": "u_lin",
+      "importance": 0.8,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "林舟",
+        "上海"
+      ],
+      "metadata": {
+        "source_quote": "林舟住在上海，通勤到张江大约四十分钟。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m003",
+      "content": "林舟养了一只橘猫叫豆包。",
+      "type": "semantic",
+      "scope": "user",
+      "scope_id": "u_lin",
+      "importance": 0.72,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "林舟",
+        "豆包"
+      ],
+      "metadata": {
+        "source_quote": "林舟养了一只橘猫叫豆包。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m004",
+      "content": "林舟不吃辣，点川菜时会要求微辣或不辣。",
+      "type": "semantic",
+      "scope": "user",
+      "scope_id": "u_lin",
+      "importance": 0.88,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "林舟"
+      ],
+      "metadata": {
+        "source_quote": "林舟不吃辣，点川菜时会要求微辣或不辣。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m005",
+      "content": "林舟对花生过敏，外出吃饭会先确认配料表。",
+      "type": "semantic",
+      "scope": "user",
+      "scope_id": "u_lin",
+      "importance": 0.9,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "林舟",
+        "花生"
+      ],
+      "metadata": {
+        "source_quote": "林舟对花生过敏，外出吃饭会先确认配料表。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m006",
+      "content": "林舟每天上午九点半参加团队站会。",
+      "type": "semantic",
+      "scope": "user",
+      "scope_id": "u_lin",
+      "importance": 0.7,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "林舟"
+      ],
+      "metadata": {
+        "source_quote": "林舟每天上午九点半参加团队站会。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m007",
+      "content": "林舟喜欢用 Go 写高并发服务，但当前项目主要用 Python。",
+      "type": "semantic",
+      "scope": "user",
+      "scope_id": "u_lin",
+      "importance": 0.75,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "林舟",
+        "Go",
+        "Python"
+      ],
+      "metadata": {
+        "source_quote": "林舟喜欢用 Go 写高并发服务，但当前项目主要用 Python。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m008",
+      "content": "林舟的代码审查习惯是先看测试再看实现。",
+      "type": "semantic",
+      "scope": "user",
+      "scope_id": "u_lin",
+      "importance": 0.7,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "林舟"
+      ],
+      "metadata": {
+        "source_quote": "林舟的代码审查习惯是先看测试再看实现。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m009",
+      "content": "宋雨是产品经理，负责 Nova 增长实验平台。",
+      "type": "semantic",
+      "scope": "user",
+      "scope_id": "u_song",
+      "importance": 0.8,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "宋雨",
+        "Nova"
+      ],
+      "metadata": {
+        "source_quote": "宋雨是产品经理，负责 Nova 增长实验平台。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m010",
+      "content": "宋雨住在北京，公司在望京。",
+      "type": "semantic",
+      "scope": "user",
+      "scope_id": "u_song",
+      "importance": 0.8,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "宋雨",
+        "北京"
+      ],
+      "metadata": {
+        "source_quote": "宋雨住在北京，公司在望京。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m011",
+      "content": "宋雨喜欢手冲咖啡，常买云南产区的豆子。",
+      "type": "semantic",
+      "scope": "user",
+      "scope_id": "u_song",
+      "importance": 0.75,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "宋雨",
+        "咖啡"
+      ],
+      "metadata": {
+        "source_quote": "宋雨喜欢手冲咖啡，常买云南产区的豆子。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m012",
+      "content": "宋雨对芒果过敏，公司下午茶会避开芒果甜点。",
+      "type": "semantic",
+      "scope": "user",
+      "scope_id": "u_song",
+      "importance": 0.9,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "宋雨",
+        "芒果"
+      ],
+      "metadata": {
+        "source_quote": "宋雨对芒果过敏，公司下午茶会避开芒果甜点。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m013",
+      "content": "宋雨每周三晚上七点做瑜伽。",
+      "type": "semantic",
+      "scope": "user",
+      "scope_id": "u_song",
+      "importance": 0.7,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "宋雨",
+        "瑜伽"
+      ],
+      "metadata": {
+        "source_quote": "宋雨每周三晚上七点做瑜伽。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m014",
+      "content": "宋雨写需求文档时会先画用户旅程图。",
+      "type": "semantic",
+      "scope": "user",
+      "scope_id": "u_song",
+      "importance": 0.72,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "宋雨"
+      ],
+      "metadata": {
+        "source_quote": "宋雨写需求文档时会先画用户旅程图。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m015",
+      "content": "陈恺是数据分析师，负责 Lakehouse 指标层。",
+      "type": "semantic",
+      "scope": "user",
+      "scope_id": "u_chen",
+      "importance": 0.8,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "陈恺",
+        "Lakehouse"
+      ],
+      "metadata": {
+        "source_quote": "陈恺是数据分析师，负责 Lakehouse 指标层。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m016",
+      "content": "陈恺住在深圳，骑自行车通勤。",
+      "type": "semantic",
+      "scope": "user",
+      "scope_id": "u_chen",
+      "importance": 0.8,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "陈恺",
+        "深圳"
+      ],
+      "metadata": {
+        "source_quote": "陈恺住在深圳，骑自行车通勤。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m017",
+      "content": "陈恺吃素，团队聚餐常点素食套餐。",
+      "type": "semantic",
+      "scope": "user",
+      "scope_id": "u_chen",
+      "importance": 0.82,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "陈恺"
+      ],
+      "metadata": {
+        "source_quote": "陈恺吃素，团队聚餐常点素食套餐。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m018",
+      "content": "陈恺不喝酒，聚餐时只喝气泡水。",
+      "type": "semantic",
+      "scope": "user",
+      "scope_id": "u_chen",
+      "importance": 0.78,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "陈恺"
+      ],
+      "metadata": {
+        "source_quote": "陈恺不喝酒，聚餐时只喝气泡水。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m019",
+      "content": "陈恺用 dbt 维护指标模型。",
+      "type": "semantic",
+      "scope": "user",
+      "scope_id": "u_chen",
+      "importance": 0.75,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "陈恺",
+        "dbt"
+      ],
+      "metadata": {
+        "source_quote": "陈恺用 dbt 维护指标模型。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m020",
+      "content": "周悦是设计师，负责品牌改版设计。",
+      "type": "semantic",
+      "scope": "user",
+      "scope_id": "u_zhou",
+      "importance": 0.8,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "周悦",
+        "品牌改版"
+      ],
+      "metadata": {
+        "source_quote": "周悦是设计师，负责品牌改版设计。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m021",
+      "content": "周悦住在杭州，工作室在拱墅区。",
+      "type": "semantic",
+      "scope": "user",
+      "scope_id": "u_zhou",
+      "importance": 0.8,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "周悦",
+        "杭州"
+      ],
+      "metadata": {
+        "source_quote": "周悦住在杭州，工作室在拱墅区。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m022",
+      "content": "周悦喜欢吃辣，常点重庆火锅。",
+      "type": "semantic",
+      "scope": "user",
+      "scope_id": "u_zhou",
+      "importance": 0.78,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "周悦",
+        "火锅"
+      ],
+      "metadata": {
+        "source_quote": "周悦喜欢吃辣，常点重庆火锅。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m023",
+      "content": "周悦主要用 Figma 做界面设计。",
+      "type": "semantic",
+      "scope": "user",
+      "scope_id": "u_zhou",
+      "importance": 0.75,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "周悦",
+        "Figma"
+      ],
+      "metadata": {
+        "source_quote": "周悦主要用 Figma 做界面设计。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m024",
+      "content": "苏禾是研究生，研究方向是中文信息抽取。",
+      "type": "semantic",
+      "scope": "user",
+      "scope_id": "u_su",
+      "importance": 0.8,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "苏禾",
+        "中文信息抽取课题"
+      ],
+      "metadata": {
+        "source_quote": "苏禾是研究生，研究方向是中文信息抽取。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m025",
+      "content": "苏禾不吃香菜，食堂打饭会特别说明。",
+      "type": "semantic",
+      "scope": "user",
+      "scope_id": "u_su",
+      "importance": 0.78,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "苏禾",
+        "香菜"
+      ],
+      "metadata": {
+        "source_quote": "苏禾不吃香菜，食堂打饭会特别说明。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m026",
+      "content": "Atlas 项目使用 PostgreSQL 作为唯一事实源。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.9,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "Atlas",
+        "PostgreSQL"
+      ],
+      "metadata": {
+        "source_quote": "Atlas 项目使用 PostgreSQL 作为唯一事实源。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m027",
+      "content": "Atlas 项目用 Qdrant 存储向量索引。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.9,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "Atlas",
+        "Qdrant"
+      ],
+      "metadata": {
+        "source_quote": "Atlas 项目用 Qdrant 存储向量索引。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m028",
+      "content": "Atlas 项目用 Neo4j 存储实体关系图。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.9,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "Atlas",
+        "Neo4j"
+      ],
+      "metadata": {
+        "source_quote": "Atlas 项目用 Neo4j 存储实体关系图。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m029",
+      "content": "Atlas 项目的任务队列基于 Celery 和 Redis。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.85,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "Atlas",
+        "Celery",
+        "Redis"
+      ],
+      "metadata": {
+        "source_quote": "Atlas 项目的任务队列基于 Celery 和 Redis。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m030",
+      "content": "Atlas 项目要求所有写操作先落 outbox 再异步投影。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.85,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "Atlas",
+        "outbox"
+      ],
+      "metadata": {
+        "source_quote": "Atlas 项目要求所有写操作先落 outbox 再异步投影。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m031",
+      "content": "Atlas 项目的检索融合算法使用 RRF，k 等于 60。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.85,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "Atlas",
+        "RRF"
+      ],
+      "metadata": {
+        "source_quote": "Atlas 项目的检索融合算法使用 RRF，k 等于 60。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m032",
+      "content": "Atlas 项目的默认上下文预算是 1500 tokens。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.8,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "Atlas"
+      ],
+      "metadata": {
+        "source_quote": "Atlas 项目的默认上下文预算是 1500 tokens。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m033",
+      "content": "Atlas 项目的 API 使用 FastAPI 编写。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.8,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "Atlas",
+        "FastAPI"
+      ],
+      "metadata": {
+        "source_quote": "Atlas 项目的 API 使用 FastAPI 编写。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m034",
+      "content": "Atlas 项目的数据库迁移由 Alembic 管理。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.8,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "Atlas",
+        "Alembic"
+      ],
+      "metadata": {
+        "source_quote": "Atlas 项目的数据库迁移由 Alembic 管理。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m035",
+      "content": "Atlas 项目的 P95 检索延迟目标是不超过 300 毫秒。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.85,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "Atlas"
+      ],
+      "metadata": {
+        "source_quote": "Atlas 项目的 P95 检索延迟目标是不超过 300 毫秒。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m036",
+      "content": "Nova 项目使用 React 和 TypeScript 构建管理台。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.82,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "Nova",
+        "React",
+        "TypeScript"
+      ],
+      "metadata": {
+        "source_quote": "Nova 项目使用 React 和 TypeScript 构建管理台。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m037",
+      "content": "Nova 项目的实验分流服务部署在 Kubernetes 上。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.8,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "Nova",
+        "Kubernetes"
+      ],
+      "metadata": {
+        "source_quote": "Nova 项目的实验分流服务部署在 Kubernetes 上。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m038",
+      "content": "Nova 项目的指标口径由指标平台统一管理。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.78,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "Nova"
+      ],
+      "metadata": {
+        "source_quote": "Nova 项目的指标口径由指标平台统一管理。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m039",
+      "content": "Nova 项目的灰度发布按城市维度逐步放量。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.82,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "Nova"
+      ],
+      "metadata": {
+        "source_quote": "Nova 项目的灰度发布按城市维度逐步放量。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m040",
+      "content": "Nova 项目的埋点规范要求每个事件带 experiment_id。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.8,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "Nova"
+      ],
+      "metadata": {
+        "source_quote": "Nova 项目的埋点规范要求每个事件带 experiment_id。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m041",
+      "content": "Lakehouse 项目使用 Iceberg 作为表格式。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.82,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "Lakehouse",
+        "Iceberg"
+      ],
+      "metadata": {
+        "source_quote": "Lakehouse 项目使用 Iceberg 作为表格式。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m042",
+      "content": "Lakehouse 项目的计算引擎是 Trino。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.85,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "Lakehouse",
+        "Trino"
+      ],
+      "metadata": {
+        "source_quote": "Lakehouse 项目的计算引擎是 Trino。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m043",
+      "content": "Lakehouse 项目每天凌晨两点运行全量对账。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.8,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "Lakehouse"
+      ],
+      "metadata": {
+        "source_quote": "Lakehouse 项目每天凌晨两点运行全量对账。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m044",
+      "content": "Lakehouse 项目的事实表按天分区。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.8,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "Lakehouse"
+      ],
+      "metadata": {
+        "source_quote": "Lakehouse 项目的事实表按天分区。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m045",
+      "content": "Lakehouse 项目的指标层使用 dbt 管理依赖。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.82,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "Lakehouse",
+        "dbt"
+      ],
+      "metadata": {
+        "source_quote": "Lakehouse 项目的指标层使用 dbt 管理依赖。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m046",
+      "content": "品牌改版项目的主色定为深海蓝。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.8,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "品牌改版",
+        "深海蓝"
+      ],
+      "metadata": {
+        "source_quote": "品牌改版项目的主色定为深海蓝。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m047",
+      "content": "品牌改版项目的字体选用思源黑体。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.8,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "品牌改版",
+        "思源黑体"
+      ],
+      "metadata": {
+        "source_quote": "品牌改版项目的字体选用思源黑体。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m048",
+      "content": "品牌改版项目要在九月前完成官网改版。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.78,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "品牌改版"
+      ],
+      "metadata": {
+        "source_quote": "品牌改版项目要在九月前完成官网改版。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m049",
+      "content": "中文信息抽取课题使用 BERT 做实体识别基线。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.82,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "中文信息抽取课题",
+        "BERT"
+      ],
+      "metadata": {
+        "source_quote": "中文信息抽取课题使用 BERT 做实体识别基线。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m050",
+      "content": "中文信息抽取课题的数据集包含 8 万条标注样本。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.8,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "中文信息抽取课题"
+      ],
+      "metadata": {
+        "source_quote": "中文信息抽取课题的数据集包含 8 万条标注样本。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m051",
+      "content": "团队统一的代码审查规则是每个 PR 至少一名同事批准。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.85,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "代码审查"
+      ],
+      "metadata": {
+        "source_quote": "团队统一的代码审查规则是每个 PR 至少一名同事批准。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m052",
+      "content": "团队统一要求提交信息使用 Conventional Commits 格式。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.82,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "Conventional Commits"
+      ],
+      "metadata": {
+        "source_quote": "团队统一要求提交信息使用 Conventional Commits 格式。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m053",
+      "content": "团队统一的告警渠道是飞书群“值班小助手”。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.8,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "飞书",
+        "值班小助手"
+      ],
+      "metadata": {
+        "source_quote": "团队统一的告警渠道是飞书群“值班小助手”。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m054",
+      "content": "团队统一的安全规范禁止把密钥写入仓库。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.88,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "安全规范"
+      ],
+      "metadata": {
+        "source_quote": "团队统一的安全规范禁止把密钥写入仓库。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m055",
+      "content": "团队统一使用 UTC 存储所有时间戳。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.8,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "UTC"
+      ],
+      "metadata": {
+        "source_quote": "团队统一使用 UTC 存储所有时间戳。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m056",
+      "content": "林舟在 Atlas 项目中负责检索服务。",
+      "type": "semantic",
+      "scope": "user",
+      "scope_id": "u_lin",
+      "importance": 0.85,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "林舟",
+        "Atlas",
+        "检索服务"
+      ],
+      "metadata": {
+        "source_quote": "林舟在 Atlas 项目中负责检索服务。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m057",
+      "content": "检索服务依赖 Qdrant 的向量检索和 Postgres 的关键词检索。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.85,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "检索服务",
+        "Qdrant",
+        "Postgres"
+      ],
+      "metadata": {
+        "source_quote": "检索服务依赖 Qdrant 的向量检索和 Postgres 的关键词检索。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m058",
+      "content": "宋雨在 Nova 项目中负责增长实验设计。",
+      "type": "semantic",
+      "scope": "user",
+      "scope_id": "u_song",
+      "importance": 0.85,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "宋雨",
+        "Nova"
+      ],
+      "metadata": {
+        "source_quote": "宋雨在 Nova 项目中负责增长实验设计。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m059",
+      "content": "Nova 的增长实验依赖指标平台提供的转化率数据。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.82,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "Nova",
+        "指标平台"
+      ],
+      "metadata": {
+        "source_quote": "Nova 的增长实验依赖指标平台提供的转化率数据。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m060",
+      "content": "陈恺在 Lakehouse 项目中负责指标层建模。",
+      "type": "semantic",
+      "scope": "user",
+      "scope_id": "u_chen",
+      "importance": 0.85,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "陈恺",
+        "Lakehouse"
+      ],
+      "metadata": {
+        "source_quote": "陈恺在 Lakehouse 项目中负责指标层建模。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m061",
+      "content": "Lakehouse 的指标层依赖事实表的每日分区。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.82,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "Lakehouse"
+      ],
+      "metadata": {
+        "source_quote": "Lakehouse 的指标层依赖事实表的每日分区。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m062",
+      "content": "周悦在品牌改版项目中负责视觉规范。",
+      "type": "semantic",
+      "scope": "user",
+      "scope_id": "u_zhou",
+      "importance": 0.85,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "周悦",
+        "品牌改版"
+      ],
+      "metadata": {
+        "source_quote": "周悦在品牌改版项目中负责视觉规范。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m063",
+      "content": "品牌改版的视觉规范包含主色深海蓝和思源黑体。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.8,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "品牌改版",
+        "深海蓝",
+        "思源黑体"
+      ],
+      "metadata": {
+        "source_quote": "品牌改版的视觉规范包含主色深海蓝和思源黑体。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m064",
+      "content": "苏禾的导师是王教授，研究方向是信息抽取。",
+      "type": "semantic",
+      "scope": "user",
+      "scope_id": "u_su",
+      "importance": 0.82,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "苏禾",
+        "王教授",
+        "中文信息抽取课题"
+      ],
+      "metadata": {
+        "source_quote": "苏禾的导师是王教授，研究方向是信息抽取。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m065",
+      "content": "王教授同时指导中文信息抽取课题的标注规范。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.8,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "王教授",
+        "中文信息抽取课题"
+      ],
+      "metadata": {
+        "source_quote": "王教授同时指导中文信息抽取课题的标注规范。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m066",
+      "content": "林舟和宋雨每周五下午同步 Atlas 与 Nova 的接口契约。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.8,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "林舟",
+        "宋雨",
+        "Atlas",
+        "Nova"
+      ],
+      "metadata": {
+        "source_quote": "林舟和宋雨每周五下午同步 Atlas 与 Nova 的接口契约。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m067",
+      "content": "Atlas 的 outbox 由 Celery worker 消费。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.82,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "Atlas",
+        "outbox",
+        "Celery"
+      ],
+      "metadata": {
+        "source_quote": "Atlas 的 outbox 由 Celery worker 消费。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m068",
+      "content": "Celery worker 的 broker 是 Redis。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.82,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "Celery",
+        "Redis"
+      ],
+      "metadata": {
+        "source_quote": "Celery worker 的 broker 是 Redis。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m069",
+      "content": "检索服务的融合阶段会调用 Neo4j 图扩展。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.8,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "检索服务",
+        "Neo4j"
+      ],
+      "metadata": {
+        "source_quote": "检索服务的融合阶段会调用 Neo4j 图扩展。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m070",
+      "content": "Neo4j 图扩展从实体出发最多走两跳。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.78,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "Neo4j"
+      ],
+      "metadata": {
+        "source_quote": "Neo4j 图扩展从实体出发最多走两跳。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m071",
+      "content": "Nova 管理台调用 Atlas 检索接口展示记忆详情。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.8,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "Nova",
+        "Atlas"
+      ],
+      "metadata": {
+        "source_quote": "Nova 管理台调用 Atlas 检索接口展示记忆详情。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m072",
+      "content": "Lakehouse 的 Trino 查询会读取 Iceberg 表。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.82,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "Lakehouse",
+        "Trino",
+        "Iceberg"
+      ],
+      "metadata": {
+        "source_quote": "Lakehouse 的 Trino 查询会读取 Iceberg 表。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m073",
+      "content": "品牌官网改版使用 React 组件库实现。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.78,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "品牌改版",
+        "React"
+      ],
+      "metadata": {
+        "source_quote": "品牌官网改版使用 React 组件库实现。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m074",
+      "content": "中文信息抽取课题的基线模型在 A100 上训练。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.8,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "中文信息抽取课题",
+        "A100"
+      ],
+      "metadata": {
+        "source_quote": "中文信息抽取课题的基线模型在 A100 上训练。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m075",
+      "content": "A100 集群由平台组统一维护。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.76,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "A100",
+        "平台组"
+      ],
+      "metadata": {
+        "source_quote": "A100 集群由平台组统一维护。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m076",
+      "content": "2026 年 3 月 12 日，林舟把检索服务的超时从 30 秒调到 10 秒。",
+      "type": "episodic",
+      "scope": "session",
+      "scope_id": "s_lin_atlas_0312",
+      "importance": 0.75,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 220,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "林舟",
+        "检索服务"
+      ],
+      "metadata": {
+        "source_quote": "2026 年 3 月 12 日，林舟把检索服务的超时从 30 秒调到 10 秒。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m077",
+      "content": "2026 年 3 月 18 日，Atlas 完成第一次四路召回联调。",
+      "type": "episodic",
+      "scope": "session",
+      "scope_id": "s_lin_atlas_0312",
+      "importance": 0.78,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 215,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "Atlas"
+      ],
+      "metadata": {
+        "source_quote": "2026 年 3 月 18 日，Atlas 完成第一次四路召回联调。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m078",
+      "content": "2026 年 4 月 2 日，宋雨在 Nova 上线了城市维度的灰度实验。",
+      "type": "episodic",
+      "scope": "session",
+      "scope_id": "s_song_nova_0408",
+      "importance": 0.78,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 200,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "宋雨",
+        "Nova"
+      ],
+      "metadata": {
+        "source_quote": "2026 年 4 月 2 日，宋雨在 Nova 上线了城市维度的灰度实验。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m079",
+      "content": "2026 年 4 月 8 日，宋雨把 Nova 的实验指标改为七日留存。",
+      "type": "episodic",
+      "scope": "session",
+      "scope_id": "s_song_nova_0408",
+      "importance": 0.76,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 195,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "宋雨",
+        "Nova"
+      ],
+      "metadata": {
+        "source_quote": "2026 年 4 月 8 日，宋雨把 Nova 的实验指标改为七日留存。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m080",
+      "content": "2026 年 4 月 15 日，陈恺修复了 Lakehouse 事实表的分区倾斜。",
+      "type": "episodic",
+      "scope": "session",
+      "scope_id": "s_chen_lake_0506",
+      "importance": 0.78,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 190,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "陈恺",
+        "Lakehouse"
+      ],
+      "metadata": {
+        "source_quote": "2026 年 4 月 15 日，陈恺修复了 Lakehouse 事实表的分区倾斜。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m081",
+      "content": "2026 年 5 月 6 日，陈恺把 Trino 集群从 8 节点扩到 12 节点。",
+      "type": "episodic",
+      "scope": "session",
+      "scope_id": "s_chen_lake_0506",
+      "importance": 0.76,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 175,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "陈恺",
+        "Trino"
+      ],
+      "metadata": {
+        "source_quote": "2026 年 5 月 6 日，陈恺把 Trino 集群从 8 节点扩到 12 节点。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m082",
+      "content": "2026 年 5 月 20 日，周悦交付了品牌改版的第一版视觉稿。",
+      "type": "episodic",
+      "scope": "session",
+      "scope_id": "s_zhou_brand_0602",
+      "importance": 0.78,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 160,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "周悦",
+        "品牌改版"
+      ],
+      "metadata": {
+        "source_quote": "2026 年 5 月 20 日，周悦交付了品牌改版的第一版视觉稿。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m083",
+      "content": "2026 年 5 月 28 日，周悦确定官网首页使用深海蓝作为主色。",
+      "type": "episodic",
+      "scope": "session",
+      "scope_id": "s_zhou_brand_0602",
+      "importance": 0.76,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 155,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "周悦",
+        "深海蓝"
+      ],
+      "metadata": {
+        "source_quote": "2026 年 5 月 28 日，周悦确定官网首页使用深海蓝作为主色。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m084",
+      "content": "2026 年 6 月 2 日，苏禾完成了 8 万条标注样本的清洗。",
+      "type": "episodic",
+      "scope": "session",
+      "scope_id": "s_su_nlp_0701",
+      "importance": 0.78,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 150,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "苏禾",
+        "中文信息抽取课题"
+      ],
+      "metadata": {
+        "source_quote": "2026 年 6 月 2 日，苏禾完成了 8 万条标注样本的清洗。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m085",
+      "content": "2026 年 6 月 10 日，苏禾的实体识别基线 F1 达到 0.87。",
+      "type": "episodic",
+      "scope": "session",
+      "scope_id": "s_su_nlp_0701",
+      "importance": 0.78,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 145,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "苏禾",
+        "中文信息抽取课题"
+      ],
+      "metadata": {
+        "source_quote": "2026 年 6 月 10 日，苏禾的实体识别基线 F1 达到 0.87。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m086",
+      "content": "2026 年 6 月 18 日，林舟在周会上演示了记忆检索的调试面板。",
+      "type": "episodic",
+      "scope": "session",
+      "scope_id": "s_lin_atlas_0312",
+      "importance": 0.76,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 130,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "林舟",
+        "检索服务"
+      ],
+      "metadata": {
+        "source_quote": "2026 年 6 月 18 日，林舟在周会上演示了记忆检索的调试面板。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m087",
+      "content": "2026 年 6 月 25 日，Atlas 的 P95 延迟从 420 毫秒降到 260 毫秒。",
+      "type": "episodic",
+      "scope": "session",
+      "scope_id": "s_lin_atlas_0312",
+      "importance": 0.8,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 125,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "Atlas"
+      ],
+      "metadata": {
+        "source_quote": "2026 年 6 月 25 日，Atlas 的 P95 延迟从 420 毫秒降到 260 毫秒。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m088",
+      "content": "2026 年 7 月 1 日，团队决定把 Neo4j 升级到 5.26 社区版。",
+      "type": "episodic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.76,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 120,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "Neo4j"
+      ],
+      "metadata": {
+        "source_quote": "2026 年 7 月 1 日，团队决定把 Neo4j 升级到 5.26 社区版。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m089",
+      "content": "2026 年 7 月 6 日，宋雨完成了 Nova 灰度实验的复盘。",
+      "type": "episodic",
+      "scope": "session",
+      "scope_id": "s_song_nova_0408",
+      "importance": 0.78,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 115,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "宋雨",
+        "Nova"
+      ],
+      "metadata": {
+        "source_quote": "2026 年 7 月 6 日，宋雨完成了 Nova 灰度实验的复盘。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m090",
+      "content": "2026 年 7 月 9 日，复盘结论是城市灰度比用户分层更稳定。",
+      "type": "episodic",
+      "scope": "session",
+      "scope_id": "s_song_nova_0408",
+      "importance": 0.8,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 110,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "Nova"
+      ],
+      "metadata": {
+        "source_quote": "2026 年 7 月 9 日，复盘结论是城市灰度比用户分层更稳定。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m091",
+      "content": "2026 年 7 月 14 日，陈恺把每日对账改到凌晨两点执行。",
+      "type": "episodic",
+      "scope": "session",
+      "scope_id": "s_chen_lake_0506",
+      "importance": 0.76,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 105,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "陈恺",
+        "Lakehouse"
+      ],
+      "metadata": {
+        "source_quote": "2026 年 7 月 14 日，陈恺把每日对账改到凌晨两点执行。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m092",
+      "content": "2026 年 7 月 20 日，周悦把品牌字体从苹方换成思源黑体。",
+      "type": "episodic",
+      "scope": "session",
+      "scope_id": "s_zhou_brand_0602",
+      "importance": 0.78,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 100,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "周悦",
+        "思源黑体"
+      ],
+      "metadata": {
+        "source_quote": "2026 年 7 月 20 日，周悦把品牌字体从苹方换成思源黑体。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m093",
+      "content": "2026 年 8 月 3 日，苏禾提交了第一篇论文初稿。",
+      "type": "episodic",
+      "scope": "session",
+      "scope_id": "s_su_nlp_0701",
+      "importance": 0.76,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 85,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "苏禾"
+      ],
+      "metadata": {
+        "source_quote": "2026 年 8 月 3 日，苏禾提交了第一篇论文初稿。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m094",
+      "content": "2026 年 8 月 11 日，王教授建议补充否定句的标注。",
+      "type": "episodic",
+      "scope": "session",
+      "scope_id": "s_su_nlp_0701",
+      "importance": 0.78,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 80,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "王教授",
+        "中文信息抽取课题"
+      ],
+      "metadata": {
+        "source_quote": "2026 年 8 月 11 日，王教授建议补充否定句的标注。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m095",
+      "content": "2026 年 8 月 19 日，林舟修复了投影失败后 outbox 不重试的问题。",
+      "type": "episodic",
+      "scope": "session",
+      "scope_id": "s_lin_atlas_0312",
+      "importance": 0.8,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 70,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "林舟",
+        "outbox"
+      ],
+      "metadata": {
+        "source_quote": "2026 年 8 月 19 日，林舟修复了投影失败后 outbox 不重试的问题。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m096",
+      "content": "2026 年 8 月 26 日，Atlas 通过了 1 万条记忆的压测。",
+      "type": "episodic",
+      "scope": "session",
+      "scope_id": "s_lin_atlas_0312",
+      "importance": 0.8,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 65,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "Atlas"
+      ],
+      "metadata": {
+        "source_quote": "2026 年 8 月 26 日，Atlas 通过了 1 万条记忆的压测。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m097",
+      "content": "2026 年 9 月 2 日，宋雨把 Nova 的埋点规范更新到 v2。",
+      "type": "episodic",
+      "scope": "session",
+      "scope_id": "s_song_nova_0408",
+      "importance": 0.76,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 55,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "宋雨",
+        "Nova"
+      ],
+      "metadata": {
+        "source_quote": "2026 年 9 月 2 日，宋雨把 Nova 的埋点规范更新到 v2。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m098",
+      "content": "2026 年 9 月 8 日，陈恺上线了 Lakehouse 的指标血缘页面。",
+      "type": "episodic",
+      "scope": "session",
+      "scope_id": "s_chen_lake_0506",
+      "importance": 0.78,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 50,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "陈恺",
+        "Lakehouse"
+      ],
+      "metadata": {
+        "source_quote": "2026 年 9 月 8 日，陈恺上线了 Lakehouse 的指标血缘页面。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m099",
+      "content": "2026 年 9 月 15 日，周悦完成了官网改版的移动端适配。",
+      "type": "episodic",
+      "scope": "session",
+      "scope_id": "s_zhou_brand_0602",
+      "importance": 0.76,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 45,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "周悦",
+        "品牌改版"
+      ],
+      "metadata": {
+        "source_quote": "2026 年 9 月 15 日，周悦完成了官网改版的移动端适配。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m100",
+      "content": "2026 年 9 月 22 日，团队确定 M1 在十月底发布。",
+      "type": "episodic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.8,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 38,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "M1"
+      ],
+      "metadata": {
+        "source_quote": "2026 年 9 月 22 日，团队确定 M1 在十月底发布。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m101",
+      "content": "2026 年 10 月 1 日，林舟完成了备份恢复演练。",
+      "type": "episodic",
+      "scope": "session",
+      "scope_id": "s_lin_atlas_0312",
+      "importance": 0.78,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 28,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "林舟"
+      ],
+      "metadata": {
+        "source_quote": "2026 年 10 月 1 日，林舟完成了备份恢复演练。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m102",
+      "content": "2026 年 10 月 8 日，苏禾在组会上分享了否定句抽取的误差分析。",
+      "type": "episodic",
+      "scope": "session",
+      "scope_id": "s_su_nlp_0701",
+      "importance": 0.78,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 22,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "苏禾",
+        "中文信息抽取课题"
+      ],
+      "metadata": {
+        "source_quote": "2026 年 10 月 8 日，苏禾在组会上分享了否定句抽取的误差分析。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m103",
+      "content": "2026 年 10 月 15 日，宋雨把 Nova 的日活口径改为去重设备数。",
+      "type": "episodic",
+      "scope": "session",
+      "scope_id": "s_song_nova_0408",
+      "importance": 0.78,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 14,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "宋雨",
+        "Nova"
+      ],
+      "metadata": {
+        "source_quote": "2026 年 10 月 15 日，宋雨把 Nova 的日活口径改为去重设备数。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m104",
+      "content": "2026 年 10 月 20 日，陈恺把 Lakehouse 的对账结果接入飞书告警。",
+      "type": "episodic",
+      "scope": "session",
+      "scope_id": "s_chen_lake_0506",
+      "importance": 0.76,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 9,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "陈恺",
+        "Lakehouse",
+        "飞书"
+      ],
+      "metadata": {
+        "source_quote": "2026 年 10 月 20 日，陈恺把 Lakehouse 的对账结果接入飞书告警。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m105",
+      "content": "2026 年 10 月 24 日，周悦提交了品牌手册的最终版。",
+      "type": "episodic",
+      "scope": "session",
+      "scope_id": "s_zhou_brand_0602",
+      "importance": 0.76,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 4,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "周悦",
+        "品牌改版"
+      ],
+      "metadata": {
+        "source_quote": "2026 年 10 月 24 日，周悦提交了品牌手册的最终版。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m106",
+      "content": "林舟住在北京。",
+      "type": "semantic",
+      "scope": "user",
+      "scope_id": "u_lin",
+      "importance": 0.6,
+      "confidence": 0.92,
+      "status": "superseded",
+      "age_days": 160,
+      "valid_to_age_days": 30,
+      "superseded_by_key": "m107",
+      "entities": [
+        "林舟",
+        "北京"
+      ],
+      "metadata": {
+        "source_quote": "林舟住在北京。",
+        "tags": [],
+        "superseded_reason": "事实随对话更新"
+      }
+    },
+    {
+      "key": "m107",
+      "content": "林舟住在上海。",
+      "type": "semantic",
+      "scope": "user",
+      "scope_id": "u_lin",
+      "importance": 0.88,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 10,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "林舟",
+        "上海"
+      ],
+      "metadata": {
+        "source_quote": "林舟住在上海。",
+        "tags": [],
+        "supersedes_key": "m106"
+      }
+    },
+    {
+      "key": "m108",
+      "content": "林舟的工位在三楼靠窗。",
+      "type": "semantic",
+      "scope": "user",
+      "scope_id": "u_lin",
+      "importance": 0.6,
+      "confidence": 0.92,
+      "status": "superseded",
+      "age_days": 160,
+      "valid_to_age_days": 30,
+      "superseded_by_key": "m109",
+      "entities": [
+        "林舟"
+      ],
+      "metadata": {
+        "source_quote": "林舟的工位在三楼靠窗。",
+        "tags": [],
+        "superseded_reason": "事实随对话更新"
+      }
+    },
+    {
+      "key": "m109",
+      "content": "林舟的工位搬到五楼靠电梯。",
+      "type": "semantic",
+      "scope": "user",
+      "scope_id": "u_lin",
+      "importance": 0.88,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 10,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "林舟"
+      ],
+      "metadata": {
+        "source_quote": "林舟的工位搬到五楼靠电梯。",
+        "tags": [],
+        "supersedes_key": "m108"
+      }
+    },
+    {
+      "key": "m110",
+      "content": "宋雨的汇报对象是李明。",
+      "type": "semantic",
+      "scope": "user",
+      "scope_id": "u_song",
+      "importance": 0.6,
+      "confidence": 0.92,
+      "status": "superseded",
+      "age_days": 160,
+      "valid_to_age_days": 30,
+      "superseded_by_key": "m111",
+      "entities": [
+        "宋雨",
+        "李明"
+      ],
+      "metadata": {
+        "source_quote": "宋雨的汇报对象是李明。",
+        "tags": [],
+        "superseded_reason": "事实随对话更新"
+      }
+    },
+    {
+      "key": "m111",
+      "content": "宋雨的汇报对象改为赵倩。",
+      "type": "semantic",
+      "scope": "user",
+      "scope_id": "u_song",
+      "importance": 0.88,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 10,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "宋雨",
+        "赵倩"
+      ],
+      "metadata": {
+        "source_quote": "宋雨的汇报对象改为赵倩。",
+        "tags": [],
+        "supersedes_key": "m110"
+      }
+    },
+    {
+      "key": "m112",
+      "content": "陈恺的团队有 6 个人。",
+      "type": "semantic",
+      "scope": "user",
+      "scope_id": "u_chen",
+      "importance": 0.6,
+      "confidence": 0.92,
+      "status": "superseded",
+      "age_days": 160,
+      "valid_to_age_days": 30,
+      "superseded_by_key": "m113",
+      "entities": [
+        "陈恺"
+      ],
+      "metadata": {
+        "source_quote": "陈恺的团队有 6 个人。",
+        "tags": [],
+        "superseded_reason": "事实随对话更新"
+      }
+    },
+    {
+      "key": "m113",
+      "content": "陈恺的团队扩到 9 个人。",
+      "type": "semantic",
+      "scope": "user",
+      "scope_id": "u_chen",
+      "importance": 0.88,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 10,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "陈恺"
+      ],
+      "metadata": {
+        "source_quote": "陈恺的团队扩到 9 个人。",
+        "tags": [],
+        "supersedes_key": "m112"
+      }
+    },
+    {
+      "key": "m114",
+      "content": "周悦的生日是 5 月 12 日。",
+      "type": "semantic",
+      "scope": "user",
+      "scope_id": "u_zhou",
+      "importance": 0.6,
+      "confidence": 0.92,
+      "status": "superseded",
+      "age_days": 160,
+      "valid_to_age_days": 30,
+      "superseded_by_key": "m115",
+      "entities": [
+        "周悦"
+      ],
+      "metadata": {
+        "source_quote": "周悦的生日是 5 月 12 日。",
+        "tags": [],
+        "superseded_reason": "事实随对话更新"
+      }
+    },
+    {
+      "key": "m115",
+      "content": "周悦的生日是 5 月 21 日。",
+      "type": "semantic",
+      "scope": "user",
+      "scope_id": "u_zhou",
+      "importance": 0.88,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 10,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "周悦"
+      ],
+      "metadata": {
+        "source_quote": "周悦的生日是 5 月 21 日。",
+        "tags": [],
+        "supersedes_key": "m114"
+      }
+    },
+    {
+      "key": "m116",
+      "content": "Atlas 的向量维度是 768。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.6,
+      "confidence": 0.92,
+      "status": "superseded",
+      "age_days": 160,
+      "valid_to_age_days": 30,
+      "superseded_by_key": "m117",
+      "entities": [
+        "Atlas"
+      ],
+      "metadata": {
+        "source_quote": "Atlas 的向量维度是 768。",
+        "tags": [],
+        "superseded_reason": "事实随对话更新"
+      }
+    },
+    {
+      "key": "m117",
+      "content": "Atlas 的向量维度改为 1536。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.88,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 10,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "Atlas"
+      ],
+      "metadata": {
+        "source_quote": "Atlas 的向量维度改为 1536。",
+        "tags": [],
+        "supersedes_key": "m116"
+      }
+    },
+    {
+      "key": "m118",
+      "content": "Atlas 的关键词检索只用 tsvector。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.6,
+      "confidence": 0.92,
+      "status": "superseded",
+      "age_days": 160,
+      "valid_to_age_days": 30,
+      "superseded_by_key": "m119",
+      "entities": [
+        "Atlas",
+        "tsvector"
+      ],
+      "metadata": {
+        "source_quote": "Atlas 的关键词检索只用 tsvector。",
+        "tags": [],
+        "superseded_reason": "事实随对话更新"
+      }
+    },
+    {
+      "key": "m119",
+      "content": "Atlas 的关键词检索增加 jieba 分词与 trigram 兜底。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.88,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 10,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "Atlas",
+        "jieba",
+        "trigram"
+      ],
+      "metadata": {
+        "source_quote": "Atlas 的关键词检索增加 jieba 分词与 trigram 兜底。",
+        "tags": [],
+        "supersedes_key": "m118"
+      }
+    },
+    {
+      "key": "m120",
+      "content": "Nova 的灰度比例是 5%。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.6,
+      "confidence": 0.92,
+      "status": "superseded",
+      "age_days": 160,
+      "valid_to_age_days": 30,
+      "superseded_by_key": "m121",
+      "entities": [
+        "Nova"
+      ],
+      "metadata": {
+        "source_quote": "Nova 的灰度比例是 5%。",
+        "tags": [],
+        "superseded_reason": "事实随对话更新"
+      }
+    },
+    {
+      "key": "m121",
+      "content": "Nova 的灰度比例提高到 20%。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.88,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 10,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "Nova"
+      ],
+      "metadata": {
+        "source_quote": "Nova 的灰度比例提高到 20%。",
+        "tags": [],
+        "supersedes_key": "m120"
+      }
+    },
+    {
+      "key": "m122",
+      "content": "Lakehouse 的保留周期是 180 天。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.6,
+      "confidence": 0.92,
+      "status": "superseded",
+      "age_days": 160,
+      "valid_to_age_days": 30,
+      "superseded_by_key": "m123",
+      "entities": [
+        "Lakehouse"
+      ],
+      "metadata": {
+        "source_quote": "Lakehouse 的保留周期是 180 天。",
+        "tags": [],
+        "superseded_reason": "事实随对话更新"
+      }
+    },
+    {
+      "key": "m123",
+      "content": "Lakehouse 的保留周期延长到 365 天。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.88,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 10,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "Lakehouse"
+      ],
+      "metadata": {
+        "source_quote": "Lakehouse 的保留周期延长到 365 天。",
+        "tags": [],
+        "supersedes_key": "m122"
+      }
+    },
+    {
+      "key": "m124",
+      "content": "苏禾的学号是 202301。",
+      "type": "semantic",
+      "scope": "user",
+      "scope_id": "u_su",
+      "importance": 0.6,
+      "confidence": 0.92,
+      "status": "superseded",
+      "age_days": 160,
+      "valid_to_age_days": 30,
+      "superseded_by_key": "m125",
+      "entities": [
+        "苏禾"
+      ],
+      "metadata": {
+        "source_quote": "苏禾的学号是 202301。",
+        "tags": [],
+        "superseded_reason": "事实随对话更新"
+      }
+    },
+    {
+      "key": "m125",
+      "content": "苏禾的学号更正为 202315。",
+      "type": "semantic",
+      "scope": "user",
+      "scope_id": "u_su",
+      "importance": 0.88,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 10,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "苏禾"
+      ],
+      "metadata": {
+        "source_quote": "苏禾的学号更正为 202315。",
+        "tags": [],
+        "supersedes_key": "m124"
+      }
+    },
+    {
+      "key": "m126",
+      "content": "品牌改版的交付日期是八月。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.6,
+      "confidence": 0.92,
+      "status": "superseded",
+      "age_days": 160,
+      "valid_to_age_days": 30,
+      "superseded_by_key": "m127",
+      "entities": [
+        "品牌改版"
+      ],
+      "metadata": {
+        "source_quote": "品牌改版的交付日期是八月。",
+        "tags": [],
+        "superseded_reason": "事实随对话更新"
+      }
+    },
+    {
+      "key": "m127",
+      "content": "品牌改版的交付日期推迟到九月。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.88,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 10,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "品牌改版"
+      ],
+      "metadata": {
+        "source_quote": "品牌改版的交付日期推迟到九月。",
+        "tags": [],
+        "supersedes_key": "m126"
+      }
+    },
+    {
+      "key": "m128",
+      "content": "团队周会是周一上午。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.6,
+      "confidence": 0.92,
+      "status": "superseded",
+      "age_days": 160,
+      "valid_to_age_days": 30,
+      "superseded_by_key": "m129",
+      "entities": [
+        "周会"
+      ],
+      "metadata": {
+        "source_quote": "团队周会是周一上午。",
+        "tags": [],
+        "superseded_reason": "事实随对话更新"
+      }
+    },
+    {
+      "key": "m129",
+      "content": "团队周会改到周二上午。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.88,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 10,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "周会"
+      ],
+      "metadata": {
+        "source_quote": "团队周会改到周二上午。",
+        "tags": [],
+        "supersedes_key": "m128"
+      }
+    },
+    {
+      "key": "m130",
+      "content": "林舟不喝咖啡，只喝无糖乌龙茶。",
+      "type": "semantic",
+      "scope": "user",
+      "scope_id": "u_lin",
+      "importance": 0.8,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "林舟",
+        "咖啡"
+      ],
+      "metadata": {
+        "source_quote": "林舟不喝咖啡，只喝无糖乌龙茶。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m131",
+      "content": "宋雨不吃香菜，点外卖会备注不要香菜。",
+      "type": "semantic",
+      "scope": "user",
+      "scope_id": "u_song",
+      "importance": 0.8,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "宋雨",
+        "香菜"
+      ],
+      "metadata": {
+        "source_quote": "宋雨不吃香菜，点外卖会备注不要香菜。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m132",
+      "content": "陈恺不吃牛肉，但可以接受鸡蛋和奶制品。",
+      "type": "semantic",
+      "scope": "user",
+      "scope_id": "u_chen",
+      "importance": 0.8,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "陈恺",
+        "牛肉"
+      ],
+      "metadata": {
+        "source_quote": "陈恺不吃牛肉，但可以接受鸡蛋和奶制品。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m133",
+      "content": "周悦不对花粉过敏，春天可以正常出门。",
+      "type": "semantic",
+      "scope": "user",
+      "scope_id": "u_zhou",
+      "importance": 0.8,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "周悦",
+        "花粉"
+      ],
+      "metadata": {
+        "source_quote": "周悦不对花粉过敏，春天可以正常出门。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m134",
+      "content": "苏禾不养宠物，宿舍不允许。",
+      "type": "semantic",
+      "scope": "user",
+      "scope_id": "u_su",
+      "importance": 0.75,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "苏禾",
+        "宠物"
+      ],
+      "metadata": {
+        "source_quote": "苏禾不养宠物，宿舍不允许。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m135",
+      "content": "林舟不会开车，出行主要坐地铁。",
+      "type": "semantic",
+      "scope": "user",
+      "scope_id": "u_lin",
+      "importance": 0.76,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "林舟",
+        "地铁"
+      ],
+      "metadata": {
+        "source_quote": "林舟不会开车，出行主要坐地铁。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m136",
+      "content": "宋雨不使用微信处理工作，只用飞书。",
+      "type": "semantic",
+      "scope": "user",
+      "scope_id": "u_song",
+      "importance": 0.82,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "宋雨",
+        "飞书",
+        "微信"
+      ],
+      "metadata": {
+        "source_quote": "宋雨不使用微信处理工作，只用飞书。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m137",
+      "content": "陈恺不在周末加班，周末通常去爬山。",
+      "type": "semantic",
+      "scope": "user",
+      "scope_id": "u_chen",
+      "importance": 0.78,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "陈恺",
+        "爬山"
+      ],
+      "metadata": {
+        "source_quote": "陈恺不在周末加班，周末通常去爬山。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m138",
+      "content": "周悦不喝含糖饮料，常点无糖气泡水。",
+      "type": "semantic",
+      "scope": "user",
+      "scope_id": "u_zhou",
+      "importance": 0.78,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "周悦",
+        "气泡水"
+      ],
+      "metadata": {
+        "source_quote": "周悦不喝含糖饮料，常点无糖气泡水。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m139",
+      "content": "苏禾不擅长公开演讲，组会汇报会提前写稿。",
+      "type": "semantic",
+      "scope": "user",
+      "scope_id": "u_su",
+      "importance": 0.76,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "苏禾"
+      ],
+      "metadata": {
+        "source_quote": "苏禾不擅长公开演讲，组会汇报会提前写稿。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m140",
+      "content": "Atlas 不支持跨 workspace 检索，所有查询必须带 workspace_id。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.85,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "Atlas"
+      ],
+      "metadata": {
+        "source_quote": "Atlas 不支持跨 workspace 检索，所有查询必须带 workspace_id。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m141",
+      "content": "Nova 不会自动修改用户的实验分组，必须人工确认。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.82,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "Nova"
+      ],
+      "metadata": {
+        "source_quote": "Nova 不会自动修改用户的实验分组，必须人工确认。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m142",
+      "content": "Lakehouse 不对原始日志做长期存储，只保留聚合指标。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.82,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "Lakehouse"
+      ],
+      "metadata": {
+        "source_quote": "Lakehouse 不对原始日志做长期存储，只保留聚合指标。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m143",
+      "content": "品牌改版不使用渐变背景，视觉规范要求纯色。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.8,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "品牌改版"
+      ],
+      "metadata": {
+        "source_quote": "品牌改版不使用渐变背景，视觉规范要求纯色。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m144",
+      "content": "团队不允许在周五下午发布生产变更。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.85,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "发布流程"
+      ],
+      "metadata": {
+        "source_quote": "团队不允许在周五下午发布生产变更。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m145",
+      "content": "公司统一要求所有服务在健康检查中暴露 /health 和 /readyz。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.85,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "健康检查"
+      ],
+      "metadata": {
+        "source_quote": "公司统一要求所有服务在健康检查中暴露 /health 和 /readyz。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m146",
+      "content": "规划 Agent 在拆解任务时必须先列出依赖关系。",
+      "type": "semantic",
+      "scope": "agent",
+      "scope_id": "agent_planner",
+      "importance": 0.82,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "规划 Agent"
+      ],
+      "metadata": {
+        "source_quote": "规划 Agent 在拆解任务时必须先列出依赖关系。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m147",
+      "content": "编码 Agent 提交代码前必须运行单元测试。",
+      "type": "semantic",
+      "scope": "agent",
+      "scope_id": "agent_coder",
+      "importance": 0.82,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "编码 Agent"
+      ],
+      "metadata": {
+        "source_quote": "编码 Agent 提交代码前必须运行单元测试。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m148",
+      "content": "研究 Agent 引用资料时必须附上来源链接。",
+      "type": "semantic",
+      "scope": "agent",
+      "scope_id": "agent_researcher",
+      "importance": 0.82,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "研究 Agent"
+      ],
+      "metadata": {
+        "source_quote": "研究 Agent 引用资料时必须附上来源链接。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m149",
+      "content": "运维 Agent 执行重建索引前必须确认 workspace。",
+      "type": "semantic",
+      "scope": "agent",
+      "scope_id": "agent_ops",
+      "importance": 0.84,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "运维 Agent",
+        "重建索引"
+      ],
+      "metadata": {
+        "source_quote": "运维 Agent 执行重建索引前必须确认 workspace。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m150",
+      "content": "辅导 Agent 解释概念时要先给例子再给定义。",
+      "type": "semantic",
+      "scope": "agent",
+      "scope_id": "agent_tutor",
+      "importance": 0.8,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "辅导 Agent"
+      ],
+      "metadata": {
+        "source_quote": "辅导 Agent 解释概念时要先给例子再给定义。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m151",
+      "content": "这次联调只关注检索超时，不处理鉴权问题。",
+      "type": "semantic",
+      "scope": "session",
+      "scope_id": "s_lin_atlas_0312",
+      "importance": 0.8,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "检索超时"
+      ],
+      "metadata": {
+        "source_quote": "这次联调只关注检索超时，不处理鉴权问题。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m152",
+      "content": "本次评审只讨论灰度指标，不改实验配置。",
+      "type": "semantic",
+      "scope": "session",
+      "scope_id": "s_song_nova_0408",
+      "importance": 0.8,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "灰度指标"
+      ],
+      "metadata": {
+        "source_quote": "本次评审只讨论灰度指标，不改实验配置。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m153",
+      "content": "这次排查只看分区倾斜，不检查 Trino 版本。",
+      "type": "semantic",
+      "scope": "session",
+      "scope_id": "s_chen_lake_0506",
+      "importance": 0.8,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "分区倾斜"
+      ],
+      "metadata": {
+        "source_quote": "这次排查只看分区倾斜，不检查 Trino 版本。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m154",
+      "content": "今天只确认主色和字体，不改布局。",
+      "type": "semantic",
+      "scope": "session",
+      "scope_id": "s_zhou_brand_0602",
+      "importance": 0.8,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "主色",
+        "字体"
+      ],
+      "metadata": {
+        "source_quote": "今天只确认主色和字体，不改布局。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m155",
+      "content": "本次实验只比较 BERT 和 RoBERTa 两个基线。",
+      "type": "semantic",
+      "scope": "session",
+      "scope_id": "s_su_nlp_0701",
+      "importance": 0.8,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "BERT",
+        "RoBERTa"
+      ],
+      "metadata": {
+        "source_quote": "本次实验只比较 BERT 和 RoBERTa 两个基线。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m156",
+      "content": "林舟的默认检索模式偏好 balanced。",
+      "type": "semantic",
+      "scope": "user",
+      "scope_id": "u_lin",
+      "importance": 0.78,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "林舟",
+        "balanced"
+      ],
+      "metadata": {
+        "source_quote": "林舟的默认检索模式偏好 balanced。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m157",
+      "content": "宋雨的默认上下文预算偏好 2000 tokens。",
+      "type": "semantic",
+      "scope": "user",
+      "scope_id": "u_song",
+      "importance": 0.78,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "宋雨"
+      ],
+      "metadata": {
+        "source_quote": "宋雨的默认上下文预算偏好 2000 tokens。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m158",
+      "content": "陈恺偏好导出 CSV 而不是 JSON。",
+      "type": "semantic",
+      "scope": "user",
+      "scope_id": "u_chen",
+      "importance": 0.78,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "陈恺",
+        "CSV"
+      ],
+      "metadata": {
+        "source_quote": "陈恺偏好导出 CSV 而不是 JSON。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m159",
+      "content": "周悦希望搜索结果默认展示缩略图。",
+      "type": "semantic",
+      "scope": "user",
+      "scope_id": "u_zhou",
+      "importance": 0.76,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "周悦"
+      ],
+      "metadata": {
+        "source_quote": "周悦希望搜索结果默认展示缩略图。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m160",
+      "content": "苏禾希望错误信息包含具体字段名。",
+      "type": "semantic",
+      "scope": "user",
+      "scope_id": "u_su",
+      "importance": 0.76,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "苏禾"
+      ],
+      "metadata": {
+        "source_quote": "苏禾希望错误信息包含具体字段名。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m161",
+      "content": "编码 Agent 不使用全局可变状态。",
+      "type": "semantic",
+      "scope": "agent",
+      "scope_id": "agent_coder",
+      "importance": 0.8,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "编码 Agent"
+      ],
+      "metadata": {
+        "source_quote": "编码 Agent 不使用全局可变状态。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m162",
+      "content": "研究 Agent 不抓取需要登录的页面。",
+      "type": "semantic",
+      "scope": "agent",
+      "scope_id": "agent_researcher",
+      "importance": 0.8,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "研究 Agent"
+      ],
+      "metadata": {
+        "source_quote": "研究 Agent 不抓取需要登录的页面。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m163",
+      "content": "所有导出文件必须在 24 小时后自动清理。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.82,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "导出"
+      ],
+      "metadata": {
+        "source_quote": "所有导出文件必须在 24 小时后自动清理。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m164",
+      "content": "所有 API Key 默认只授予 read 权限。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.85,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "API Key"
+      ],
+      "metadata": {
+        "source_quote": "所有 API Key 默认只授予 read 权限。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m165",
+      "content": "发布流程：先运行全量 pytest，再构建镜像，最后按 5% 灰度发布。",
+      "type": "procedural",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.86,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "发布流程"
+      ],
+      "metadata": {
+        "source_quote": "发布流程：先运行全量 pytest，再构建镜像，最后按 5% 灰度发布。",
+        "tags": [],
+        "skill": {
+          "trigger": "发布流程",
+          "steps": [
+            "发布流程：先运行全量 pytest，再构建镜像，最后按 5% 灰度发布。"
+          ],
+          "success_count": 8,
+          "failure_count": 1
+        }
+      }
+    },
+    {
+      "key": "m166",
+      "content": "数据库迁移流程：先备份，再执行 alembic upgrade，失败时回滚到上一版本。",
+      "type": "procedural",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.78,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "数据库迁移流程"
+      ],
+      "metadata": {
+        "source_quote": "数据库迁移流程：先备份，再执行 alembic upgrade，失败时回滚到上一版本。",
+        "tags": [],
+        "skill": {
+          "trigger": "数据库迁移流程",
+          "steps": [
+            "数据库迁移流程：先备份，再执行 alembic upgrade，失败时回滚到上一版本。"
+          ],
+          "success_count": 4,
+          "failure_count": 1
+        }
+      }
+    },
+    {
+      "key": "m167",
+      "content": "重建索引流程：先确认 workspace，再运行 worker_cli rebuild，最后核对 Qdrant 点数。",
+      "type": "procedural",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.86,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "重建索引流程"
+      ],
+      "metadata": {
+        "source_quote": "重建索引流程：先确认 workspace，再运行 worker_cli rebuild，最后核对 Qdrant 点数。",
+        "tags": [],
+        "skill": {
+          "trigger": "重建索引流程",
+          "steps": [
+            "重建索引流程：先确认 workspace，再运行 worker_cli rebuild，最后核对 Qdrant 点数。"
+          ],
+          "success_count": 4,
+          "failure_count": 1
+        }
+      }
+    },
+    {
+      "key": "m168",
+      "content": "备份流程：用 pg_dump 导出 Postgres，再把 assets 目录打包，并写入 manifest。",
+      "type": "procedural",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.86,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "备份流程"
+      ],
+      "metadata": {
+        "source_quote": "备份流程：用 pg_dump 导出 Postgres，再把 assets 目录打包，并写入 manifest。",
+        "tags": [],
+        "skill": {
+          "trigger": "备份流程",
+          "steps": [
+            "备份流程：用 pg_dump 导出 Postgres，再把 assets 目录打包，并写入 manifest。"
+          ],
+          "success_count": 4,
+          "failure_count": 1
+        }
+      }
+    },
+    {
+      "key": "m169",
+      "content": "恢复流程：先校验 manifest，再恢复数据库和资产，最后执行 rebuild-index。",
+      "type": "procedural",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.86,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "恢复流程"
+      ],
+      "metadata": {
+        "source_quote": "恢复流程：先校验 manifest，再恢复数据库和资产，最后执行 rebuild-index。",
+        "tags": [],
+        "skill": {
+          "trigger": "恢复流程",
+          "steps": [
+            "恢复流程：先校验 manifest，再恢复数据库和资产，最后执行 rebuild-index。"
+          ],
+          "success_count": 8,
+          "failure_count": 1
+        }
+      }
+    },
+    {
+      "key": "m170",
+      "content": "故障排查流程：Qdrant 不可用时先检查容器健康，再查看 projection_state 错误。",
+      "type": "procedural",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.86,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "故障排查流程"
+      ],
+      "metadata": {
+        "source_quote": "故障排查流程：Qdrant 不可用时先检查容器健康，再查看 projection_state 错误。",
+        "tags": [],
+        "skill": {
+          "trigger": "故障排查流程",
+          "steps": [
+            "故障排查流程：Qdrant 不可用时先检查容器健康，再查看 projection_state 错误。"
+          ],
+          "success_count": 4,
+          "failure_count": 1
+        }
+      }
+    },
+    {
+      "key": "m171",
+      "content": "Neo4j 启动慢的处理：等待 Bolt 就绪，超时后检查内存配置。",
+      "type": "procedural",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.78,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "Neo4j 启动流程"
+      ],
+      "metadata": {
+        "source_quote": "Neo4j 启动慢的处理：等待 Bolt 就绪，超时后检查内存配置。",
+        "tags": [],
+        "skill": {
+          "trigger": "Neo4j 启动流程",
+          "steps": [
+            "Neo4j 启动慢的处理：等待 Bolt 就绪，超时后检查内存配置。"
+          ],
+          "success_count": 4,
+          "failure_count": 1
+        }
+      }
+    },
+    {
+      "key": "m172",
+      "content": "迁移失败处理：查看 alembic current，确认版本后从备份恢复。",
+      "type": "procedural",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.78,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "迁移失败处理"
+      ],
+      "metadata": {
+        "source_quote": "迁移失败处理：查看 alembic current，确认版本后从备份恢复。",
+        "tags": [],
+        "skill": {
+          "trigger": "迁移失败处理",
+          "steps": [
+            "迁移失败处理：查看 alembic current，确认版本后从备份恢复。"
+          ],
+          "success_count": 4,
+          "failure_count": 1
+        }
+      }
+    },
+    {
+      "key": "m173",
+      "content": "磁盘满处理：先清理临时导出文件，再检查备份目录占用。",
+      "type": "procedural",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.78,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "磁盘满处理"
+      ],
+      "metadata": {
+        "source_quote": "磁盘满处理：先清理临时导出文件，再检查备份目录占用。",
+        "tags": [],
+        "skill": {
+          "trigger": "磁盘满处理",
+          "steps": [
+            "磁盘满处理：先清理临时导出文件，再检查备份目录占用。"
+          ],
+          "success_count": 4,
+          "failure_count": 1
+        }
+      }
+    },
+    {
+      "key": "m174",
+      "content": "新增记忆类型的流程：先加枚举，再补迁移和测试。",
+      "type": "procedural",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.78,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "新增记忆类型流程"
+      ],
+      "metadata": {
+        "source_quote": "新增记忆类型的流程：先加枚举，再补迁移和测试。",
+        "tags": [],
+        "skill": {
+          "trigger": "新增记忆类型流程",
+          "steps": [
+            "新增记忆类型的流程：先加枚举，再补迁移和测试。"
+          ],
+          "success_count": 4,
+          "failure_count": 1
+        }
+      }
+    },
+    {
+      "key": "m175",
+      "content": "代码审查流程：先看测试覆盖率，再看错误处理，最后看命名。",
+      "type": "procedural",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.78,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "代码审查流程"
+      ],
+      "metadata": {
+        "source_quote": "代码审查流程：先看测试覆盖率，再看错误处理，最后看命名。",
+        "tags": [],
+        "skill": {
+          "trigger": "代码审查流程",
+          "steps": [
+            "代码审查流程：先看测试覆盖率，再看错误处理，最后看命名。"
+          ],
+          "success_count": 8,
+          "failure_count": 1
+        }
+      }
+    },
+    {
+      "key": "m176",
+      "content": "事故响应流程：先止血，再定位根因，最后补复盘和监控。",
+      "type": "procedural",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.78,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "事故响应流程"
+      ],
+      "metadata": {
+        "source_quote": "事故响应流程：先止血，再定位根因，最后补复盘和监控。",
+        "tags": [],
+        "skill": {
+          "trigger": "事故响应流程",
+          "steps": [
+            "事故响应流程：先止血，再定位根因，最后补复盘和监控。"
+          ],
+          "success_count": 4,
+          "failure_count": 1
+        }
+      }
+    },
+    {
+      "key": "m177",
+      "content": "发布回滚流程：切回上一个镜像标签，并确认数据库迁移可降级。",
+      "type": "procedural",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.78,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "发布回滚流程"
+      ],
+      "metadata": {
+        "source_quote": "发布回滚流程：切回上一个镜像标签，并确认数据库迁移可降级。",
+        "tags": [],
+        "skill": {
+          "trigger": "发布回滚流程",
+          "steps": [
+            "发布回滚流程：切回上一个镜像标签，并确认数据库迁移可降级。"
+          ],
+          "success_count": 4,
+          "failure_count": 1
+        }
+      }
+    },
+    {
+      "key": "m178",
+      "content": "密钥轮换流程：先生成新密钥，再更新环境变量，最后重启服务。",
+      "type": "procedural",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.78,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "密钥轮换流程"
+      ],
+      "metadata": {
+        "source_quote": "密钥轮换流程：先生成新密钥，再更新环境变量，最后重启服务。",
+        "tags": [],
+        "skill": {
+          "trigger": "密钥轮换流程",
+          "steps": [
+            "密钥轮换流程：先生成新密钥，再更新环境变量，最后重启服务。"
+          ],
+          "success_count": 4,
+          "failure_count": 1
+        }
+      }
+    },
+    {
+      "key": "m179",
+      "content": "数据导出流程：选择 workspace 和格式，等待任务完成，再下载文件。",
+      "type": "procedural",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.78,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "数据导出流程"
+      ],
+      "metadata": {
+        "source_quote": "数据导出流程：选择 workspace 和格式，等待任务完成，再下载文件。",
+        "tags": [],
+        "skill": {
+          "trigger": "数据导出流程",
+          "steps": [
+            "数据导出流程：选择 workspace 和格式，等待任务完成，再下载文件。"
+          ],
+          "success_count": 8,
+          "failure_count": 1
+        }
+      }
+    },
+    {
+      "key": "m180",
+      "content": "导出文件清理流程：检查创建时间超过 24 小时的文件并删除。",
+      "type": "procedural",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.78,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "导出清理流程"
+      ],
+      "metadata": {
+        "source_quote": "导出文件清理流程：检查创建时间超过 24 小时的文件并删除。",
+        "tags": [],
+        "skill": {
+          "trigger": "导出清理流程",
+          "steps": [
+            "导出文件清理流程：检查创建时间超过 24 小时的文件并删除。"
+          ],
+          "success_count": 4,
+          "failure_count": 1
+        }
+      }
+    },
+    {
+      "key": "m181",
+      "content": "测试数据准备流程：先建 workspace，再建 Agent 和用户，最后批量导入记忆。",
+      "type": "procedural",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.78,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "测试数据准备流程"
+      ],
+      "metadata": {
+        "source_quote": "测试数据准备流程：先建 workspace，再建 Agent 和用户，最后批量导入记忆。",
+        "tags": [],
+        "skill": {
+          "trigger": "测试数据准备流程",
+          "steps": [
+            "测试数据准备流程：先建 workspace，再建 Agent 和用户，最后批量导入记忆。"
+          ],
+          "success_count": 4,
+          "failure_count": 1
+        }
+      }
+    },
+    {
+      "key": "m182",
+      "content": "黄金集评测流程：先跑 fake provider，再跑 real provider 对比指标。",
+      "type": "procedural",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.78,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "黄金集评测流程"
+      ],
+      "metadata": {
+        "source_quote": "黄金集评测流程：先跑 fake provider，再跑 real provider 对比指标。",
+        "tags": [],
+        "skill": {
+          "trigger": "黄金集评测流程",
+          "steps": [
+            "黄金集评测流程：先跑 fake provider，再跑 real provider 对比指标。"
+          ],
+          "success_count": 4,
+          "failure_count": 1
+        }
+      }
+    },
+    {
+      "key": "m183",
+      "content": "性能压测流程：批量导入一万条记忆，再执行一百次检索并记录 P95。",
+      "type": "procedural",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.86,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "性能压测流程"
+      ],
+      "metadata": {
+        "source_quote": "性能压测流程：批量导入一万条记忆，再执行一百次检索并记录 P95。",
+        "tags": [],
+        "skill": {
+          "trigger": "性能压测流程",
+          "steps": [
+            "性能压测流程：批量导入一万条记忆，再执行一百次检索并记录 P95。"
+          ],
+          "success_count": 4,
+          "failure_count": 1
+        }
+      }
+    },
+    {
+      "key": "m184",
+      "content": "Provider 探测流程：先校验 URL，再发送最小请求，最后记录延迟。",
+      "type": "procedural",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.78,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "Provider 探测流程"
+      ],
+      "metadata": {
+        "source_quote": "Provider 探测流程：先校验 URL，再发送最小请求，最后记录延迟。",
+        "tags": [],
+        "skill": {
+          "trigger": "Provider 探测流程",
+          "steps": [
+            "Provider 探测流程：先校验 URL，再发送最小请求，最后记录延迟。"
+          ],
+          "success_count": 4,
+          "failure_count": 1
+        }
+      }
+    },
+    {
+      "key": "m185",
+      "content": "日志排查流程：先按 request_id 过滤，再查看同一 trace 的错误。",
+      "type": "procedural",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.78,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "日志排查流程"
+      ],
+      "metadata": {
+        "source_quote": "日志排查流程：先按 request_id 过滤，再查看同一 trace 的错误。",
+        "tags": [],
+        "skill": {
+          "trigger": "日志排查流程",
+          "steps": [
+            "日志排查流程：先按 request_id 过滤，再查看同一 trace 的错误。"
+          ],
+          "success_count": 8,
+          "failure_count": 1
+        }
+      }
+    },
+    {
+      "key": "m186",
+      "content": "待审记忆处理流程：先看证据原话，再修改内容，最后批量通过。",
+      "type": "procedural",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.78,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "待审处理流程"
+      ],
+      "metadata": {
+        "source_quote": "待审记忆处理流程：先看证据原话，再修改内容，最后批量通过。",
+        "tags": [],
+        "skill": {
+          "trigger": "待审处理流程",
+          "steps": [
+            "待审记忆处理流程：先看证据原话，再修改内容，最后批量通过。"
+          ],
+          "success_count": 4,
+          "failure_count": 1
+        }
+      }
+    },
+    {
+      "key": "m187",
+      "content": "会话巩固流程：先 dry-run 查看差异，再执行合并，必要时回滚。",
+      "type": "procedural",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.78,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "会话巩固流程"
+      ],
+      "metadata": {
+        "source_quote": "会话巩固流程：先 dry-run 查看差异，再执行合并，必要时回滚。",
+        "tags": [],
+        "skill": {
+          "trigger": "会话巩固流程",
+          "steps": [
+            "会话巩固流程：先 dry-run 查看差异，再执行合并，必要时回滚。"
+          ],
+          "success_count": 4,
+          "failure_count": 1
+        }
+      }
+    },
+    {
+      "key": "m188",
+      "content": "衰减清理流程：先跑 dry-run 确认归档范围，再执行 sweep。",
+      "type": "procedural",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.78,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "衰减清理流程"
+      ],
+      "metadata": {
+        "source_quote": "衰减清理流程：先跑 dry-run 确认归档范围，再执行 sweep。",
+        "tags": [],
+        "skill": {
+          "trigger": "衰减清理流程",
+          "steps": [
+            "衰减清理流程：先跑 dry-run 确认归档范围，再执行 sweep。"
+          ],
+          "success_count": 4,
+          "failure_count": 1
+        }
+      }
+    },
+    {
+      "key": "m189",
+      "content": "备份保留流程：每天生成一份备份，保留最近三十天。",
+      "type": "procedural",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.78,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "备份保留流程"
+      ],
+      "metadata": {
+        "source_quote": "备份保留流程：每天生成一份备份，保留最近三十天。",
+        "tags": [],
+        "skill": {
+          "trigger": "备份保留流程",
+          "steps": [
+            "备份保留流程：每天生成一份备份，保留最近三十天。"
+          ],
+          "success_count": 8,
+          "failure_count": 1
+        }
+      }
+    },
+    {
+      "key": "m190",
+      "content": "资产上传流程：先校验大小和类型，再写入 assets 目录，最后记录路径。",
+      "type": "procedural",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.78,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "资产上传流程"
+      ],
+      "metadata": {
+        "source_quote": "资产上传流程：先校验大小和类型，再写入 assets 目录，最后记录路径。",
+        "tags": [],
+        "skill": {
+          "trigger": "资产上传流程",
+          "steps": [
+            "资产上传流程：先校验大小和类型，再写入 assets 目录，最后记录路径。"
+          ],
+          "success_count": 4,
+          "failure_count": 1
+        }
+      }
+    },
+    {
+      "key": "m191",
+      "content": "Atlas 的 MCP 服务默认挂载在 /mcp 路径。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.8,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "Atlas",
+        "MCP"
+      ],
+      "metadata": {
+        "source_quote": "Atlas 的 MCP 服务默认挂载在 /mcp 路径。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m192",
+      "content": "记忆详情页支持查看历史版本和来源原话。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.78,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "记忆详情页"
+      ],
+      "metadata": {
+        "source_quote": "记忆详情页支持查看历史版本和来源原话。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m193",
+      "content": "管理台的登录失败限制是每分钟五次。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.8,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "管理台",
+        "登录"
+      ],
+      "metadata": {
+        "source_quote": "管理台的登录失败限制是每分钟五次。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m194",
+      "content": "API Key 明文只在创建时展示一次。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.82,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "API Key"
+      ],
+      "metadata": {
+        "source_quote": "API Key 明文只在创建时展示一次。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m195",
+      "content": "会话 Cookie 使用 HttpOnly 和 SameSite=Lax。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.8,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "会话 Cookie"
+      ],
+      "metadata": {
+        "source_quote": "会话 Cookie 使用 HttpOnly 和 SameSite=Lax。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m196",
+      "content": "审计日志默认保留 180 天。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.78,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "审计日志"
+      ],
+      "metadata": {
+        "source_quote": "审计日志默认保留 180 天。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m197",
+      "content": "待审队列默认保留 90 天。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.78,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "待审队列"
+      ],
+      "metadata": {
+        "source_quote": "待审队列默认保留 90 天。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m198",
+      "content": "软删除的记忆保留 30 天后才会物理清理。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.8,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "软删除"
+      ],
+      "metadata": {
+        "source_quote": "软删除的记忆保留 30 天后才会物理清理。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m199",
+      "content": "导出任务通过 SSE 推送进度。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.78,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "导出",
+        "SSE"
+      ],
+      "metadata": {
+        "source_quote": "导出任务通过 SSE 推送进度。",
+        "tags": []
+      }
+    },
+    {
+      "key": "m200",
+      "content": "生产环境强制安全 Cookie，并要求 HTTPS。",
+      "type": "semantic",
+      "scope": "global",
+      "scope_id": null,
+      "importance": 0.82,
+      "confidence": 0.92,
+      "status": "active",
+      "age_days": 12,
+      "valid_to_age_days": null,
+      "superseded_by_key": null,
+      "entities": [
+        "生产环境",
+        "HTTPS"
+      ],
+      "metadata": {
+        "source_quote": "生产环境强制安全 Cookie，并要求 HTTPS。",
+        "tags": []
+      }
+    }
+  ]
+}

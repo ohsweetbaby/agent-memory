@@ -2,6 +2,9 @@
 .worktrees
 .superpowers
 .venv
+.env
+.env.*
+!.env.example
 **/__pycache__
 **/*.pyc
 .pytest_cache
@@ -11,4 +14,6 @@ docs
 backups
 artifacts
 apps/api/tests
-apps/web
+apps/web/node_modules
+apps/web/dist
+apps/web/e2e

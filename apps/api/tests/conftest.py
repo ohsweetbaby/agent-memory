@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import sys
 from collections.abc import Callable, Iterator
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -10,6 +12,23 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.main import create_app
+
+# 评测/压测共享 support 包；子目录 conftest 也会复用这里的 stack fixture。
+_TESTS_DIR = Path(__file__).resolve().parent
+if str(_TESTS_DIR) not in sys.path:
+    sys.path.insert(0, str(_TESTS_DIR))
+
+from support.stack import InfraStack, start_stack  # noqa: E402
+
+
+@pytest.fixture(scope="session")
+def stack() -> Iterator[InfraStack]:
+    """真实 Postgres + Qdrant + Neo4j；仅 eval/perf 测试会请求它。"""
+    infra = start_stack()
+    try:
+        yield infra
+    finally:
+        infra.close()
 
 
 @pytest.fixture()

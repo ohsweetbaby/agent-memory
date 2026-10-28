@@ -24,7 +24,11 @@ dev = [
 
 [tool.pytest.ini_options]
 testpaths = ["apps/api/tests", "packages/memory-core/tests", "packages/mcp-stdio/tests"]
-addopts = "-ra"
+# perf 基准需要真实容器与 1 万条数据，默认不参与普通测试；
+# 需要时显式运行 `uv run pytest apps/api/tests/perf -m perf`。
+addopts = "-ra -m 'not perf'"
 markers = [
     "integration: 需要 Docker 的集成测试",
+    "eval: 黄金集评测（默认参与）",
+    "perf: 性能基准，需显式 -m perf",
 ]

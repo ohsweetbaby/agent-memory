@@ -159,6 +159,44 @@ class QdrantIndex:
             wait=True,
         )
 
+    def upsert_many(
+        self,
+        points: Sequence[tuple[str, list[float], dict[str, Any]]],
+        *,
+        batch_size: int = 256,
+    ) -> int:
+        """批量 upsert；评测/压测与大规模重建避免逐条 HTTP 往返。
+
+        逐批 ``wait=True``，最后一批返回即代表所有点已可检索。空输入直接
+        返回 0，不触发 collection 创建。
+        """
+        if not points:
+            return 0
+        self.ensure_collection()
+        total = 0
+        for start in range(0, len(points), max(1, batch_size)):
+            batch: list[models.PointStruct] = []
+            for memory_id, vector, payload in points[start : start + batch_size]:
+                if len(vector) != self.dim:
+                    raise ValueError(
+                        "向量维度不匹配: "
+                        f"collection={self.dim} actual={len(vector)}"
+                    )
+                batch.append(
+                    models.PointStruct(
+                        id=memory_id,
+                        vector=[float(value) for value in vector],
+                        payload=_jsonable(payload),
+                    )
+                )
+            self._client.upsert(
+                collection_name=self.collection,
+                points=batch,
+                wait=True,
+            )
+            total += len(batch)
+        return total
+
     def _build_filter(
         self, filters: dict[str, Any] | None
     ) -> models.Filter | None:

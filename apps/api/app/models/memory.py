@@ -49,6 +49,12 @@ class Memory(Base, TimestampMixin):
         ),
         Index("ix_memory_search_tsv", "search_tsv", postgresql_using="gin"),
         Index(
+            "ix_memory_content_trgm",
+            "content",
+            postgresql_using="gin",
+            postgresql_ops={"content": "gin_trgm_ops"},
+        ),
+        Index(
             "ix_memory_metadata",
             "metadata",
             postgresql_using="gin",
