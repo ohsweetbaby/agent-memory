@@ -301,12 +301,39 @@ def _find_candidates(
     return sorted(scored.values(), key=lambda item: item[1], reverse=True)
 
 
+_SUBJECT_BEFORE_LOCATION = re.compile(
+    r"^([\u4e00-\u9fffA-Za-z0-9_]{1,16}?)(?:住在|居住在|搬到|迁到|搬去|移居到?|位于)"
+)
+_SUBJECT_ADVERBS = re.compile(r"(?:现在|目前|最近|刚刚|已经|已|刚|现)$")
+
+
+def _content_subject(content: str) -> str | None:
+    """提取事实主语；覆盖写入管线未收录的移动类谓词。"""
+    extracted = extract_subject_predicate(content)
+    raw = extracted[0] if extracted is not None else None
+    if raw is None:
+        match = _SUBJECT_BEFORE_LOCATION.match(content.strip())
+        raw = match.group(1).strip() if match else None
+    return _SUBJECT_ADVERBS.sub("", raw) if raw else raw
+
+
+def _subjects_compatible(new_content: str, old_content: str) -> bool:
+    """双方都能提取主语时要求一致，避免“父母住北京”被“我搬到上海”取代。"""
+    new_subject = _content_subject(new_content)
+    old_subject = _content_subject(old_content)
+    if new_subject is None or old_subject is None:
+        return True
+    return new_subject.casefold() == old_subject.casefold()
+
+
 def _semantic_target(
     encoded: EncodedMemory,
     candidates: list[tuple[Memory, float]],
     judge: ConflictJudge,
 ) -> Memory | None:
     for memory, _ in candidates:
+        if not _subjects_compatible(encoded.content, memory.content):
+            continue
         try:
             verdict = judge.is_contradiction(encoded.content, memory.content)
         except Exception:  # judge 是不可信外部能力，失败必须退化到规则

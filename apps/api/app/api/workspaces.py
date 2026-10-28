@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import DEFAULT_PAGE_SIZE, audit_actor, ensure_workspace, paginate
-from app.auth.session import AuthContext, require_scope
+from app.auth.session import AuthContext, require_scope, require_session_scope
 from app.db import get_db
 from app.models import Workspace
 from app.services.audit import write_audit
@@ -54,7 +54,7 @@ def list_workspaces(
 @router.post("", status_code=201)
 def create_workspace(
     payload: WorkspaceCreate,
-    context: AuthContext = Depends(require_scope("admin")),
+    context: AuthContext = Depends(require_session_scope("admin")),
     session: Session = Depends(get_db),
 ) -> dict[str, Any]:
     workspace = Workspace(name=payload.name)
@@ -88,7 +88,7 @@ def get_workspace(
 def patch_workspace(
     workspace_id: str,
     payload: WorkspacePatch,
-    context: AuthContext = Depends(require_scope("admin")),
+    context: AuthContext = Depends(require_session_scope("admin")),
     session: Session = Depends(get_db),
 ) -> dict[str, Any]:
     workspace = ensure_workspace(session, context, workspace_id)

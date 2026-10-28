@@ -40,6 +40,24 @@ def test_revoked_key_is_rejected(client, revoked_key: str) -> None:
     assert response.status_code == 401
 
 
+def test_admin_api_key_cannot_touch_global_providers(client, workspace) -> None:
+    created = client.post(
+        "/api/v1/keys",
+        json={
+            "workspace_id": workspace["id"],
+            "name": "global-admin-attempt",
+            "scopes": ["admin"],
+        },
+    )
+    assert created.status_code == 201, created.text
+    raw = created.json()["key"]
+    response = client.get(
+        "/api/v1/providers", headers={"Authorization": f"Bearer {raw}"}
+    )
+    assert response.status_code == 403
+    assert response.json()["error"]["code"] == "forbidden"
+
+
 def test_key_is_returned_in_plaintext_only_on_creation(
     client, admin, workspace, read_key
 ) -> None:

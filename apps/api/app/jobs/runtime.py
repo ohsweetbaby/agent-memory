@@ -77,7 +77,13 @@ def build_runtime(settings: Settings | None = None) -> Runtime:
         model=embedding.name,
         dim=embedding.dim,
     )
-    neo4j = Neo4jIndex.from_settings(resolved)
+    # compose.lite 用空 NEO4J_URI 表示“无图库”；此时图通道应降级而不是
+    # 让整个 runtime 构造失败。
+    neo4j = (
+        Neo4jIndex.from_settings(resolved)
+        if resolved.neo4j_uri.strip()
+        else None
+    )
     return Runtime(
         session_scope=_session_scope,
         embedding=embedding,

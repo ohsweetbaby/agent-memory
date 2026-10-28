@@ -28,7 +28,7 @@ from app.auth.session import (
 )
 from app.db import get_db
 from app.errors import ConflictError, RateLimitError, UnauthorizedError
-from app.models import AdminUser
+from app.models import AdminUser, Workspace
 from app.models.base import utcnow
 from app.services.audit import write_audit
 
@@ -87,6 +87,9 @@ def setup(payload: SetupRequest, session: Session = Depends(get_db)) -> dict[str
     )
     session.add(admin)
     session.flush()
+    # 首次安装即创建默认工作区，否则设置页无法创建第一个 API Key。
+    if session.get(Workspace, "ws_default") is None:
+        session.add(Workspace(id="ws_default", name="默认工作区"))
     write_audit(
         session,
         action="auth.setup",

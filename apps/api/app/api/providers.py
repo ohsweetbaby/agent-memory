@@ -25,7 +25,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import audit_actor
 from app.auth.crypto import decrypt_secret, encrypt_secret
-from app.auth.session import AuthContext, require_scope
+from app.auth.session import AuthContext, require_session_scope
 from app.config import get_current_settings
 from app.db import get_db
 from app.errors import BadRequestError, ConflictError, NotFoundError
@@ -307,7 +307,7 @@ def _record_test_audit(
 
 @router.get("")
 def list_providers(
-    context: AuthContext = Depends(require_scope("admin")),
+    context: AuthContext = Depends(require_session_scope("admin")),
     session: Session = Depends(get_db),
 ) -> dict[str, Any]:
     items = list(
@@ -326,7 +326,7 @@ def list_providers(
 @router.get("/{provider_id}")
 def get_provider(
     provider_id: str,
-    context: AuthContext = Depends(require_scope("admin")),
+    context: AuthContext = Depends(require_session_scope("admin")),
     session: Session = Depends(get_db),
 ) -> dict[str, Any]:
     return _provider_payload(_load_provider(session, provider_id))
@@ -335,7 +335,7 @@ def get_provider(
 @router.post("", status_code=201)
 def create_provider(
     payload: ProviderCreate,
-    context: AuthContext = Depends(require_scope("admin")),
+    context: AuthContext = Depends(require_session_scope("admin")),
     session: Session = Depends(get_db),
 ) -> dict[str, Any]:
     ensure_no_nul(payload.name, "name")
@@ -382,7 +382,7 @@ def create_provider(
 def update_provider(
     provider_id: str,
     payload: ProviderUpdate,
-    context: AuthContext = Depends(require_scope("admin")),
+    context: AuthContext = Depends(require_session_scope("admin")),
     session: Session = Depends(get_db),
 ) -> dict[str, Any]:
     provider = _load_provider(session, provider_id)
@@ -436,7 +436,7 @@ def update_provider(
 @router.delete("/{provider_id}", status_code=204)
 def delete_provider(
     provider_id: str,
-    context: AuthContext = Depends(require_scope("admin")),
+    context: AuthContext = Depends(require_session_scope("admin")),
     session: Session = Depends(get_db),
 ) -> Response:
     provider = _load_provider(session, provider_id)
@@ -459,7 +459,7 @@ def delete_provider(
 @router.post("/test")
 async def test_provider_draft(
     payload: ProviderTestRequest,
-    context: AuthContext = Depends(require_scope("admin")),
+    context: AuthContext = Depends(require_session_scope("admin")),
     session: Session = Depends(get_db),
 ) -> ProviderTestResult:
     """未保存表单的连通性测试；复用已存密钥时强制使用已保存的 Base URL。"""
@@ -511,7 +511,7 @@ async def test_provider_draft(
 @router.post("/{provider_id}/test")
 async def test_provider(
     provider_id: str,
-    context: AuthContext = Depends(require_scope("admin")),
+    context: AuthContext = Depends(require_session_scope("admin")),
     session: Session = Depends(get_db),
 ) -> ProviderTestResult:
     provider = _load_provider(session, provider_id)

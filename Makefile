@@ -26,6 +26,7 @@ e2e:
 
 seed:
 	$(COMPOSE_CMD) exec -T api python -m app.seed
+	$(COMPOSE_CMD) exec -T api python -m app.worker_cli rebuild --target all --workspace ws_demo
 
 backup:
 	bash infra/scripts/backup.sh

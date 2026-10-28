@@ -28,7 +28,10 @@ def test_workspace_get_patch_and_list(client, admin) -> None:
 
     listed = client.get("/api/v1/workspaces")
     assert listed.status_code == 200
-    assert [item["id"] for item in listed.json()["items"]] == [created["id"]]
+    ids = {item["id"] for item in listed.json()["items"]}
+    assert created["id"] in ids
+    # setup 会创建默认工作区，保证全新安装可以直接创建第一个 API Key。
+    assert "ws_default" in ids
     assert client.get("/api/v1/workspaces/ws_missing").status_code == 404
 
 

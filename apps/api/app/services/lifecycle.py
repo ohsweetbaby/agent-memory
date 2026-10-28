@@ -28,7 +28,15 @@ from sqlalchemy.orm import Session
 from memory_core.decay import DecayParams, should_archive
 
 from app.adapters.neo4j import GraphEntity, GraphLink
-from app.models import AuditLog, Entity, Memory, MemoryEntity, MemoryLink, ReviewItem
+from app.models import (
+    AuditLog,
+    Entity,
+    Memory,
+    MemoryEmbedding,
+    MemoryEntity,
+    MemoryLink,
+    ReviewItem,
+)
 from app.repositories.embedding import EmbeddingRepository
 from app.repositories.memory import MemoryRepository
 from app.repositories.outbox import OutboxRepository
@@ -162,16 +170,34 @@ def purge_deleted(
     purged = 0
     for memory in _purgeable_memories(db, cutoff, workspace_id):
         asset_paths = list((memory.metadata_ or {}).get("asset_paths") or [])
-        metadata = dict(memory.metadata_ or {})
-        metadata["purged_at"] = now.isoformat()
         before = {
             "status": memory.status,
             "deleted_at": memory.deleted_at.isoformat()
             if memory.deleted_at
             else None,
-            "metadata": dict(memory.metadata_ or {}),
         }
-        repo.update(memory, status="purged", metadata=metadata)
+        # 到期清理同样要抹掉正文与派生行；墓碑只保留 outbox/对账所需字段。
+        repo.update(
+            memory,
+            status="purged",
+            content="",
+            summary=None,
+            metadata={"purged_at": now.isoformat(), "asset_paths": asset_paths},
+        )
+        db.execute(
+            delete(MemoryEmbedding).where(MemoryEmbedding.memory_id == memory.id)
+        )
+        db.execute(delete(MemoryEntity).where(MemoryEntity.memory_id == memory.id))
+        db.execute(
+            delete(MemoryLink).where(
+                or_(MemoryLink.from_id == memory.id, MemoryLink.to_id == memory.id)
+            )
+        )
+        db.execute(
+            delete(AuditLog).where(
+                AuditLog.target_type == "memory", AuditLog.target_id == memory.id
+            )
+        )
         write_audit(
             db,
             action="purge.completed",
@@ -181,6 +207,7 @@ def purge_deleted(
             actor_type="system",
             before=before,
             after={
+                "content": "[purged]",
                 "status": "purged",
                 "asset_paths": asset_paths,
                 "retention_days": days,

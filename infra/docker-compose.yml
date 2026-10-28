@@ -18,6 +18,7 @@ x-app-environment: &app-environment
   LLM_BASE_URL: "${LLM_BASE_URL:-https://api.openai.com/v1}"
   LLM_API_KEY: "${LLM_API_KEY:-}"
   CORS_ORIGINS: "${CORS_ORIGINS:-http://localhost:5173,http://localhost:8080}"
+  EXPORT_DIR: /data/exports
 
 services:
   postgres:
@@ -84,6 +85,17 @@ services:
       start_period: 30s
     restart: unless-stopped
 
+  migrate:
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    command: ["alembic", "-c", "apps/api/alembic.ini", "upgrade", "head"]
+    environment: *app-environment
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
   api:
     build:
       context: ..
@@ -93,7 +105,10 @@ services:
       - "${API_PORT:-8000}:8000"
     volumes:
       - assets_data:/data/assets:ro
+      - exports_data:/data/exports
     depends_on:
+      migrate:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       redis:
@@ -132,7 +147,10 @@ services:
     environment: *app-environment
     volumes:
       - assets_data:/data/assets
+      - exports_data:/data/exports
     depends_on:
+      migrate:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       redis:
@@ -151,6 +169,26 @@ services:
       timeout: 10s
       retries: 5
       start_period: 30s
+    restart: unless-stopped
+
+  beat:
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    command:
+      [
+        "celery",
+        "-A",
+        "app.jobs.celery_app:celery_app",
+        "beat",
+        "--loglevel=INFO",
+      ]
+    environment: *app-environment
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
     restart: unless-stopped
 
   web:
@@ -177,3 +215,4 @@ volumes:
   qdrant_data:
   neo4j_data:
   assets_data:
+  exports_data:

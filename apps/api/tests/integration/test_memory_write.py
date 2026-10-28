@@ -183,6 +183,20 @@ def test_rule_judge_supersedes_location_change_without_llm(
     assert old["status"] == "superseded" and old["superseded_by"] == second["id"]
 
 
+def test_judge_does_not_supersede_a_different_subject(
+    client, admin, valid_write_payload
+) -> None:
+    first = client.post(
+        "/api/v1/memories", json=valid_write_payload(content="父母住在北京")
+    ).json()
+    second = client.post(
+        "/api/v1/memories", json=valid_write_payload(content="我搬到上海")
+    ).json()
+    assert second["action"] == "created"
+    old = client.get(f"/api/v1/memories/{first['id']}").json()
+    assert old["status"] == "active"
+
+
 def test_encoding_marks_pii_and_honors_explicit_remember(
     client, admin, valid_write_payload
 ) -> None:

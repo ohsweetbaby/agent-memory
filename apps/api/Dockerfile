@@ -27,7 +27,7 @@ COPY packages/memory-core/memory_core packages/memory-core/memory_core
 COPY packages/mcp-stdio/pyproject.toml packages/mcp-stdio/pyproject.toml
 COPY packages/mcp-stdio/memory_mcp packages/mcp-stdio/memory_mcp
 
-RUN uv sync --frozen --no-dev --package agent-memory-api
+RUN uv sync --frozen --no-dev --all-packages
 
 ENV PATH="/app/.venv/bin:${PATH}"
 

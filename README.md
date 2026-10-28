@@ -46,6 +46,8 @@ docker compose -f infra/docker-compose.yml up -d --build
 docker compose -f infra/docker-compose.yml ps
 ```
 
+`migrate` 一次性执行迁移后会以 `Exited (0)` 结束；`beat` 负责 outbox 投影与定时巩固/遗忘，必须保持运行。
+
 1. 打开 <http://localhost:8080/setup>，创建管理员。
 2. 登录后进入「设置」→ 新建 Provider，点击「测试连接」。
 3. 新建一个 API Key（明文只展示一次，请立即复制）。

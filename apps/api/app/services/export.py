@@ -129,7 +129,10 @@ def _audit_record(entry: AuditLog) -> dict[str, Any]:
 def _memory_rows(db: Session, workspace_id: str) -> Iterator[Memory]:
     statement = (
         select(Memory)
-        .where(Memory.workspace_id == workspace_id)
+        .where(
+            Memory.workspace_id == workspace_id,
+            Memory.status != "purged",
+        )
         .order_by(Memory.created_at.asc(), Memory.id.asc())
         .execution_options(yield_per=200)
     )
@@ -148,9 +151,19 @@ def _episode_rows(db: Session, workspace_id: str) -> Iterator[Episode]:
 
 
 def _audit_rows(db: Session, workspace_id: str) -> Iterator[AuditLog]:
+    purged_ids = select(Memory.id).where(
+        Memory.workspace_id == workspace_id,
+        Memory.status == "purged",
+    )
     statement = (
         select(AuditLog)
-        .where(AuditLog.workspace_id == workspace_id)
+        .where(
+            AuditLog.workspace_id == workspace_id,
+            ~(
+                (AuditLog.target_type == "memory")
+                & (AuditLog.target_id.in_(purged_ids))
+            ),
+        )
         .order_by(AuditLog.created_at.asc(), AuditLog.id.asc())
         .execution_options(yield_per=200)
     )

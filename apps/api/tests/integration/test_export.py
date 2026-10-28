@@ -87,7 +87,11 @@ def test_export_contains_memories_and_audit(
     workspace,
 ) -> None:
     response = client.post(
-        "/api/v1/jobs/run", json={"type": "export", "params": {"format": "json"}}
+        "/api/v1/jobs/run",
+        json={
+            "type": "export",
+            "params": {"format": "json", "workspace_id": workspace["id"]},
+        },
     )
     assert response.status_code == 200, response.text
     job_id = response.json()["job_id"]
@@ -135,6 +139,42 @@ def test_export_markdown_groups_by_type(
     assert "# " in content
     assert "semantic" in content and "episodic" in content
     assert "用户对花生过敏" in content
+
+
+def test_export_excludes_purged_content(
+    client,
+    admin,
+    valid_write_payload,
+    export_runtime,
+    run_worker_once,
+    read_export,
+    workspace,
+) -> None:
+    secret = "PURGED-EXPORT-SECRET-9271"
+    created = client.post(
+        "/api/v1/memories",
+        json=valid_write_payload(
+            content=secret, scope="user", scope_id="u-export-purged"
+        ),
+    ).json()
+    deleted = client.delete(
+        f"/api/v1/memories/{created['id']}?hard=true&confirm=true"
+    )
+    assert deleted.status_code == 200, deleted.text
+
+    job_id = client.post(
+        "/api/v1/jobs/run",
+        json={
+            "type": "export",
+            "params": {"format": "json", "workspace_id": workspace["id"]},
+        },
+    ).json()["job_id"]
+    run_worker_once()
+    content = read_export(job_id)
+
+    assert secret not in content
+    ids = {item["id"] for item in json.loads(content)["memories"]}
+    assert created["id"] not in ids
 
 
 def test_export_download_returns_file(

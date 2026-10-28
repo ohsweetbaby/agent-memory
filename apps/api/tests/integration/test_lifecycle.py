@@ -346,6 +346,8 @@ def test_hard_delete_is_idempotent_and_has_no_second_side_effect(
     with session_factory() as session:
         memory = session.get(Memory, memory_with_attached_file.id)
         assert memory.status == "purged"
+        assert memory.content == ""
+        assert "source_quote" not in (memory.metadata_ or {})
         events = session.scalar(
             select(func.count())
             .select_from(OutboxEvent)

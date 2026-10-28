@@ -11,6 +11,8 @@ docker compose -f infra/docker-compose.yml up -d --build
 docker compose -f infra/docker-compose.yml ps
 ```
 
+`ps` 中 `migrate` 显示 `Exited (0)` 是预期结果；`beat` 必须处于运行状态，否则 outbox 投影和所有定时任务都不会执行。
+
 首次启动后访问 `http://localhost:8080/setup` 创建管理员。健康检查：
 
 ```bash
@@ -22,14 +24,23 @@ curl -s http://localhost:8000/metrics | head
 
 ## 2. 数据库迁移
 
+Compose 的 `migrate` 一次性服务会在 api/worker/beat 启动前执行迁移；正常情况下无需手工操作。检查：
+
 ```bash
-uv run alembic -c apps/api/alembic.ini upgrade head
-uv run alembic -c apps/api/alembic.ini current
+docker compose -f infra/docker-compose.yml ps migrate
+docker compose -f infra/docker-compose.yml run --rm migrate alembic -c apps/api/alembic.ini current
+```
+
+手工升级：
+
+```bash
+docker compose -f infra/docker-compose.yml run --rm migrate \
+  alembic -c apps/api/alembic.ini upgrade head
 ```
 
 - 生产升级前先备份（见第 4 节）。
 - 迁移失败时 Alembic 会停在失败版本，先查看 `alembic_version` 与容器日志，再决定回滚或修复，不要直接删表。
-- 容器内的 api 镜像已包含 alembic 配置；若只改了迁移，需要重建镜像。
+- 容器内的 api 镜像包含 alembic 配置与迁移脚本；改迁移后需要重建镜像。
 
 ## 3. 索引重建与对账
 
@@ -37,10 +48,12 @@ Postgres 是唯一事实源。Qdrant/Neo4j 异常时优先重建，不要手工�
 
 ```bash
 # 单个工作区（推荐）
-uv run python -m app.worker_cli rebuild --target all --workspace ws_demo
+docker compose -f infra/docker-compose.yml exec -T api \
+  python -m app.worker_cli rebuild --target all --workspace ws_demo
 
 # 全量（会清理所有 workspace 的派生索引，打印跨租户警告）
-uv run python -m app.worker_cli rebuild --target all --all
+docker compose -f infra/docker-compose.yml exec -T api \
+  python -m app.worker_cli rebuild --target all --all
 ```
 
 - `--workspace` 与 `--all` 必须二选一；空/空白 workspace 会直接退出 2。
@@ -56,7 +69,8 @@ ls backups/latest
 bash infra/scripts/restore.sh backups/latest --yes
 
 # 恢复后必须重建索引
-uv run python -m app.worker_cli rebuild --target all --all
+docker compose -f infra/docker-compose.yml exec -T api \
+  python -m app.worker_cli rebuild --target all --all
 ```
 
 - 备份内容：`pg.dump`（Postgres 自定义格式）、`assets.tar.gz`（资产卷）、`manifest.json`。
@@ -86,6 +100,11 @@ make seed
 # 或
 docker compose -f infra/docker-compose.yml exec -T api \
   python -m app.seed --workspace ws_demo --memories 200 --review 20
+
+# seed 直接写事实源，不经过 outbox；随后重建该 workspace 的派生索引，
+# 否则 Playground 的向量/图通道在 beat 首次对账前是空的。
+docker compose -f infra/docker-compose.yml exec -T api \
+  python -m app.worker_cli rebuild --target all --workspace ws_demo
 ```
 
 重复执行会清空并重建同一 workspace 的演示数据，不会影响其他 workspace。

@@ -70,6 +70,8 @@ class Neo4jIndex:
 
     @classmethod
     def from_settings(cls, settings: Any) -> Neo4jIndex:
+        if not str(settings.neo4j_uri or "").strip():
+            raise ValueError("NEO4J_URI 为空；图通道不可用")
         return cls(
             settings.neo4j_uri,
             settings.neo4j_user,

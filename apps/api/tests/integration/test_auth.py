@@ -16,6 +16,12 @@ def test_setup_allowed_only_once(client) -> None:
     assert client.post("/api/v1/auth/setup", json={"password": PASSWORD}).status_code == 409
 
 
+def test_setup_creates_default_workspace(client, admin) -> None:
+    """全新安装必须能直接创建第一个 API Key，因此 setup 要建默认工作区。"""
+    body = client.get("/api/v1/workspaces").json()
+    assert any(item["id"] == "ws_default" for item in body["items"])
+
+
 def test_setup_rejects_short_password(client) -> None:
     response = client.post("/api/v1/auth/setup", json={"password": "short"})
     assert response.status_code == 422

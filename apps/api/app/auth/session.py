@@ -170,3 +170,20 @@ def require_scope(required: str):
         return context
 
     return dependency
+
+
+def require_session_scope(required: str = "admin"):
+    """只接受管理台会话；用于全局配置等跨租户操作。
+
+    workspace 级 admin API Key 不应因为拥有 ``admin`` scope 就获得修改全局
+    Provider/工作区的权限，否则可借已存密钥把凭据外送到任意 Base URL。
+    """
+    if required not in SCOPES:
+        raise ValueError(f"未知 scope: {required}")
+
+    def dependency(context: AuthContext = Depends(require_scope(required))) -> AuthContext:
+        if context.kind != "session":
+            raise ForbiddenError("该端点只接受管理台会话")
+        return context
+
+    return dependency

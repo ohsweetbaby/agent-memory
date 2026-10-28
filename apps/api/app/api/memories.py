@@ -12,7 +12,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Response
 from pydantic import BaseModel, Field
-from sqlalchemy import or_, select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.orm import Session, aliased
 
 from memory_core.types import Scope
@@ -28,7 +28,7 @@ from app.api.deps import (
 from app.auth.session import AuthContext, require_auth, require_scope
 from app.db import get_db
 from app.errors import BadRequestError, ForbiddenError, NotFoundError
-from app.models import AuditLog, Memory, MemoryLink
+from app.models import AuditLog, Memory, MemoryEmbedding, MemoryEntity, MemoryLink
 from app.models.base import utcnow
 from app.repositories.memory import MemoryRepository
 from app.repositories.outbox import OutboxRepository
@@ -197,14 +197,37 @@ def _mark_hard_deleted(
     memory_id = memory.id
     workspace_id = memory.workspace_id
     asset_paths = memory_asset_paths(memory)
-    metadata = dict(memory.metadata_ or {})
-    metadata["purged_at"] = utcnow().isoformat()
-    before = _audit_snapshot(memory)
+    purged_at = utcnow().isoformat()
+    before = {
+        "content": "[purged]",
+        "summary": None,
+        "importance": memory.importance,
+        "status": memory.status,
+        "version": memory.version,
+    }
+    # 硬删除必须在事实源里真正抹掉正文与派生行；只保留对账所需的最小墓碑。
     MemoryRepository(session).update(
         memory,
         status="purged",
+        content="",
+        summary=None,
         deleted_at=utcnow(),
-        metadata=metadata,
+        metadata={"purged_at": purged_at, "asset_paths": asset_paths},
+    )
+    session.execute(
+        delete(MemoryEmbedding).where(MemoryEmbedding.memory_id == memory_id)
+    )
+    session.execute(delete(MemoryEntity).where(MemoryEntity.memory_id == memory_id))
+    session.execute(
+        delete(MemoryLink).where(
+            or_(MemoryLink.from_id == memory_id, MemoryLink.to_id == memory_id)
+        )
+    )
+    # 历史审计快照可能含正文；删除目标记忆的旧审计，仅保留本次最小删除记录。
+    session.execute(
+        delete(AuditLog).where(
+            AuditLog.target_type == "memory", AuditLog.target_id == memory_id
+        )
     )
     write_audit(
         session,
@@ -216,7 +239,9 @@ def _mark_hard_deleted(
         actor_id=actor_id,
         before=before,
         after={
-            **_audit_snapshot(memory),
+            "content": "[purged]",
+            "status": "purged",
+            "version": memory.version,
             "hard": True,
             "purged": True,
             **({"query": query} if query else {}),
