@@ -148,7 +148,9 @@ def _purgeable_memories(
     if workspace_id is not None:
         statement = statement.where(Memory.workspace_id == workspace_id)
     return list(
-        db.scalars(statement.order_by(Memory.deleted_at.asc(), Memory.id.asc()))
+        db.scalars(
+            statement.order_by(Memory.deleted_at.asc(), Memory.id.asc()).limit(500)
+        )
     )
 
 

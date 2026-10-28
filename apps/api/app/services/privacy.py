@@ -50,6 +50,7 @@ def redact_related_records(
         .values(
             result={"redacted": True, "reason": "memory_purged"},
             params={"redacted": True},
+            error=None,
         )
     )
 

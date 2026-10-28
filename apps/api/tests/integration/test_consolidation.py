@@ -426,6 +426,11 @@ def test_rollback_restores_superseded_validity(
     )
     diff = consolidate_session(db_session, "s1")
     assert diff.superseded_memories == 1
+    supersede_action = next(
+        action for action in diff.actions if action["action"] == "supersede"
+    )
+    # 硬删除依赖 action 中的新记忆 id 去脱敏审计/任务快照。
+    assert supersede_action["memory_id"]
     db_session.refresh(old)
     assert old.status == "superseded" and old.valid_to is not None
 

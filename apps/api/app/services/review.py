@@ -13,14 +13,14 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
 
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from memory_core.types import MemoryType, Scope
 
 from app.config import get_current_settings
 from app.errors import ConflictError
-from app.models import ReviewItem
+from app.models import AuditLog, ReviewItem
 from app.models.base import utcnow
 from app.schemas.memory import EntitySpec, ValidationError, ensure_no_nul, normalize_content
 from app.services.audit import actor_fields, write_audit
@@ -325,6 +325,13 @@ def purge_expired_review_items(
     """删除超过保留期的待审项（含已处理和未处理），供 T16 清理任务调用。"""
     days = retention_days or get_current_settings().review_retention_days
     cutoff = (now or utcnow()) - timedelta(days=days)
+    expired_ids = select(ReviewItem.id).where(ReviewItem.created_at < cutoff)
+    db.execute(
+        delete(AuditLog).where(
+            AuditLog.target_type == "review_item",
+            AuditLog.target_id.in_(expired_ids),
+        )
+    )
     result = db.execute(delete(ReviewItem).where(ReviewItem.created_at < cutoff))
     db.commit()
     removed = int(result.rowcount or 0)

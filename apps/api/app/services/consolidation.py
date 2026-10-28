@@ -1229,7 +1229,11 @@ def _apply_plan(
                 tally.merged_memories += 1
                 status = "applied"
         elif kind == "supersede":
-            if _supersede_memory(db, run_id=run_id, action=action, actor=actor):
+            new_memory = _supersede_memory(
+                db, run_id=run_id, action=action, actor=actor
+            )
+            if new_memory is not None:
+                action["memory_id"] = new_memory.id
                 tally.created_memories += 1
                 tally.superseded_memories += 1
                 status = "applied"
