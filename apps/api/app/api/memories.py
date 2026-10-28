@@ -35,6 +35,7 @@ from app.repositories.outbox import OutboxRepository
 from app.schemas.memory import MemoryWriteRequest, normalize_content
 from app.services.audit import write_audit
 from app.services.encoding import detect_pii
+from app.services.privacy import redact_related_records
 from app.services.lifecycle import (
     cascade_hard_delete,
     memory_asset_paths,
@@ -229,6 +230,7 @@ def _mark_hard_deleted(
             AuditLog.target_type == "memory", AuditLog.target_id == memory_id
         )
     )
+    redact_related_records(session, memory_id, workspace_id)
     write_audit(
         session,
         action="memory.deleted",

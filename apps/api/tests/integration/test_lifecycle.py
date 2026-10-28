@@ -23,7 +23,14 @@ from app.adapters.neo4j import Neo4jIndex
 from app.adapters.qdrant import QdrantIndex
 from app.jobs.runtime import Runtime, configure_runtime, reset_runtime
 from app.jobs.tasks import dispatch_outbox
-from app.models import AuditLog, Memory, OutboxEvent, ProjectionState, ReviewItem
+from app.models import (
+    AuditLog,
+    JobRun,
+    Memory,
+    OutboxEvent,
+    ProjectionState,
+    ReviewItem,
+)
 from app.models.base import utcnow
 from app.repositories.memory import MemoryRepository
 from app.services.lifecycle import (
@@ -367,6 +374,47 @@ def test_hard_delete_is_idempotent_and_has_no_second_side_effect(
         assert events == 1
         assert audits == 1
     assert all(not path.exists() for path in paths)
+
+
+def test_hard_delete_redacts_related_review_and_job_snapshots(
+    client,
+    admin,
+    memory_with_attached_file,
+    session_factory,
+) -> None:
+    memory_id = memory_with_attached_file.id
+    with session_factory() as session:
+        session.add(
+            ReviewItem(
+                workspace_id=memory_with_attached_file.workspace_id,
+                candidate={"memory_id": memory_id, "content": "review secret"},
+                evidence={"source_quote": "review secret"},
+                status="approved",
+            )
+        )
+        session.add(
+            JobRun(
+                type="consolidate",
+                status="completed",
+                result={"actions": [{"memory_id": memory_id, "content": "job secret"}]},
+            )
+        )
+        session.commit()
+
+    response = client.delete(
+        f"/api/v1/memories/{memory_id}?hard=true&confirm=true"
+    )
+    assert response.status_code == 200, response.text
+
+    with session_factory() as session:
+        remaining = session.scalars(
+            select(ReviewItem).where(
+                ReviewItem.candidate["memory_id"].astext == memory_id
+            )
+        ).all()
+        assert remaining == []
+        jobs = session.scalars(select(JobRun)).all()
+        assert all("job secret" not in str(job.result) for job in jobs)
 
 
 def test_purge_worker_cascades_indexes_and_assets(

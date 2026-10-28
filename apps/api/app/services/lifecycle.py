@@ -41,6 +41,7 @@ from app.repositories.embedding import EmbeddingRepository
 from app.repositories.memory import MemoryRepository
 from app.repositories.outbox import OutboxRepository
 from app.services.audit import write_audit
+from app.services.privacy import redact_related_records
 
 logger = logging.getLogger(__name__)
 
@@ -198,6 +199,7 @@ def purge_deleted(
                 AuditLog.target_type == "memory", AuditLog.target_id == memory.id
             )
         )
+        redact_related_records(db, memory.id, memory.workspace_id)
         write_audit(
             db,
             action="purge.completed",
