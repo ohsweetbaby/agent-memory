@@ -255,6 +255,17 @@ def prune_ops_history(
     review_cutoff = now - timedelta(days=max(int(review_days), 0))
 
     audit_statement = delete(AuditLog).where(AuditLog.created_at < audit_cutoff)
+    expired_review_ids = select(ReviewItem.id).where(
+        ReviewItem.created_at < review_cutoff
+    )
+    # 审核项过期时同步删除其审计快照，避免 after.content 在 90–180 天窗口内
+    # 继续被导出；审计保留期仍由 audit_cutoff 控制其余记录。
+    db.execute(
+        delete(AuditLog).where(
+            AuditLog.target_type == "review_item",
+            AuditLog.target_id.in_(expired_review_ids),
+        )
+    )
     review_statement = delete(ReviewItem).where(
         ReviewItem.created_at < review_cutoff
     )

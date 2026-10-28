@@ -1202,6 +1202,7 @@ def _apply_plan(
                     tally.created_episodes += 1
                 if memory is not None:
                     tally.created_memories += 1
+                    action["memory_id"] = memory.id
                 status = "applied" if episode_created else "skipped"
         elif kind == "create":
             memory = _create_memory(
@@ -1221,6 +1222,7 @@ def _apply_plan(
             )
             if memory is not None:
                 tally.created_memories += 1
+                action["memory_id"] = memory.id
                 status = "applied"
         elif kind == "merge":
             if _merge_memory(db, run_id=run_id, action=action, actor=actor):

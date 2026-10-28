@@ -34,6 +34,12 @@ def redact_related_records(
         db.execute(delete(ReviewItem).where(ReviewItem.id.in_(review_ids)))
 
     db.execute(
+        delete(AuditLog).where(
+            AuditLog.action == "consolidation.completed",
+            cast(AuditLog.after, Text).contains(memory_id),
+        )
+    )
+    db.execute(
         update(JobRun)
         .where(
             or_(
