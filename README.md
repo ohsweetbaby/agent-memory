@@ -100,7 +100,7 @@ uv run memory-mcp --api-url http://localhost:8000 --api-key mem_xxx_yyy
 ## 本地开发
 
 ```bash
-uv sync
+uv sync --all-packages
 uv run alembic -c apps/api/alembic.ini upgrade head
 uv run uvicorn --factory app.main:create_app --reload --port 8000
 ```

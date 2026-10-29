@@ -24,6 +24,7 @@ dependencies = [
 dev = [
     { name = "httpx" },
     { name = "pytest" },
+    { name = "testcontainers" },
 ]
 
 [package.metadata]
@@ -37,6 +38,7 @@ requires-dist = [
 dev = [
     { name = "httpx", specifier = ">=0.27,<1" },
     { name = "pytest", specifier = ">=8.3,<9" },
+    { name = "testcontainers", extras = ["postgres"], specifier = ">=4.9,<5" },
 ]
 
 [[package]]
