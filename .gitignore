@@ -19,3 +19,7 @@ htmlcov/
 .playwright/
 dist/
 assets/
+.local/
+celerybeat-schedule*
+playwright-report/
+test-results/
