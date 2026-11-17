@@ -337,11 +337,13 @@ def _semantic_target(
         try:
             verdict = judge.is_contradiction(encoded.content, memory.content)
         except Exception:  # judge 是不可信外部能力，失败必须退化到规则
+            # 只跳过出错的候选，其余候选仍需判定；否则一个候选超时就会让
+            # 后面能明确判为矛盾的记忆（如"住在北京→搬到上海"）漏判。
             logger.warning(
-                "conflict judge failed; falling back to rules",
-                extra={"workspace_id": encoded.workspace_id},
+                "conflict judge failed on one candidate; continuing",
+                extra={"workspace_id": encoded.workspace_id, "candidate_id": memory.id},
             )
-            return None
+            continue
         if verdict is True:
             return memory
     return None
@@ -720,6 +722,14 @@ def feedback_memory(
 
     updates: dict[str, Any] = {"metadata": metadata}
     if helpful:
+        # 显式 helpful 反馈是一次有效复习（规格 §5.4）。按 §4.3 的状态机，
+        # archived 记忆经复习应回到 active；否则强化后的记忆仍被默认检索排除，
+        # "被复习的记忆保留率显著更高"无从体现。superseded 是事实被取代，
+        # 不因反馈复活。复活时清除遗忘扫描留下的归档标记。
+        if memory.status == "archived":
+            metadata.pop("archived_reason", None)
+            metadata.pop("archived_at", None)
+            updates["status"] = "active"
         updates.update(
             importance=score_importance(
                 memory.content,

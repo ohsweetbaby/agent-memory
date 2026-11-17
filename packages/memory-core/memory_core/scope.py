@@ -46,6 +46,9 @@ def visible_scopes(
             continue
         identifier = getattr(ctx, field_name)
         if identifier and identifier.strip():
-            visible.append((scope, identifier))
+            # scope_id 在写入时被规范化为去首尾空白的值（见 encoding._resolve_scope_id），
+            # 这里必须使用同样的规范化结果，否则 " a1 " 永远匹配不到存储的 "a1"，
+            # 调用方会静默丢失该作用域的私有记忆。
+            visible.append((scope, identifier.strip()))
 
     return visible

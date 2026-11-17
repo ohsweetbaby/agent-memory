@@ -260,6 +260,12 @@ def prune_ops_history(
     expired_review_ids = select(ReviewItem.id).where(
         ReviewItem.created_at < review_cutoff
     )
+    # 逐工作区清理时，待审审计快照也必须限定在同一工作区，否则会删除其他
+    # 租户的审计记录，并让那些仍在的待审项失去审计快照。
+    if workspace_id is not None:
+        expired_review_ids = expired_review_ids.where(
+            ReviewItem.workspace_id == workspace_id
+        )
     # 审核项过期时同步删除其审计快照，避免 after.content 在 90–180 天窗口内
     # 继续被导出；审计保留期仍由 audit_cutoff 控制其余记录。
     db.execute(

@@ -636,9 +636,11 @@ def _plan_facts(
                 if judge.is_contradiction(fact, memory.content) is True:
                     contradicting = memory
                     break
-            except Exception:  # judge 是不可信外部能力，失败退回合并
-                logger.warning("consolidation conflict judge failed")
-                break
+            except Exception:  # judge 是不可信外部能力，失败退回规则/合并
+                # 单个候选判定失败不应让后续候选跳过，否则明确矛盾的事实
+                # 会被错误地合并进既有记忆。
+                logger.warning("consolidation conflict judge failed on one candidate")
+                continue
         if contradicting is not None and contradicting.id not in planned_supersede:
             planned_supersede.add(contradicting.id)
             actions.append(

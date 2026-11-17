@@ -437,6 +437,28 @@ def test_forget_by_query_escapes_like_wildcards(
     assert len(items) == len(seeded_memories)
 
 
+def test_list_query_escapes_like_wildcards(client, admin, seeded_memories) -> None:
+    """列表 q= 与按 query 遗忘一致：通配符按字面量匹配。"""
+    for pattern in ("%", "_", "\\"):
+        response = client.get("/api/v1/memories", params={"q": pattern})
+        assert response.status_code == 200, response.text
+        assert response.json()["items"] == []
+
+
+def test_list_query_matches_literal_percent(
+    client, admin, workspace, valid_write_payload
+) -> None:
+    client.post(
+        "/api/v1/memories",
+        json=valid_write_payload(content="折扣 50% 优惠"),
+    )
+    response = client.get("/api/v1/memories", params={"q": "%"})
+    assert response.status_code == 200, response.text
+    assert any(
+        item["content"] == "折扣 50% 优惠" for item in response.json()["items"]
+    )
+
+
 def test_forget_by_query_key_cross_workspace_returns_404(
     client, admin, write_key, other_workspace_memory
 ) -> None:

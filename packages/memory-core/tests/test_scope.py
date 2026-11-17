@@ -48,6 +48,16 @@ def test_blank_identifiers_are_treated_as_missing():
     ]
 
 
+def test_padded_identifiers_are_normalized_like_stored_scope_ids():
+    ctx = ScopeContext("ws1", agent_id=" a1 ", end_user_id=" u1 ", session_id=" s1 ")
+    assert visible_scopes(ctx) == [
+        (Scope.GLOBAL, None),
+        (Scope.AGENT, "a1"),
+        (Scope.USER, "u1"),
+        (Scope.SESSION, "s1"),
+    ]
+
+
 def test_scope_context_is_frozen():
     ctx = ScopeContext("ws1")
     assert (ctx.agent_id, ctx.end_user_id, ctx.session_id) == (None, None, None)

@@ -422,7 +422,9 @@ def list_memories(
     if min_importance is not None:
         statement = statement.where(Memory.importance >= min_importance)
     if q and q.strip():
-        statement = statement.where(Memory.content.ilike(f"%{q.strip()}%"))
+        statement = statement.where(
+            Memory.content.ilike(_contains_pattern(q.strip()), escape="\\")
+        )
     # ``status=active`` 不代表“当前有效”；默认排除 valid_to 已过期的记忆。
     # 显式请求 superseded 时不再按有效期裁剪，否则历史条目永远查不到。
     if not include_history and status != "superseded":

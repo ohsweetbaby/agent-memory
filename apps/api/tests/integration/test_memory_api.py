@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from sqlalchemy import func, select
 
-from app.models import AuditLog
+from app.models import AuditLog, Memory
 
 pytestmark = pytest.mark.integration
 
@@ -27,6 +27,47 @@ def test_feedback_increases_importance_and_stability(
             AuditLog.target_id == memory.id,
         )
     )
+
+
+def test_helpful_feedback_reactivates_archived_memory(
+    client, admin, db_session, memory
+) -> None:
+    """有效复习应让归档记忆重新激活（规格 §4.3 状态机），并清除归档标记。"""
+    row = db_session.get(Memory, memory.id)
+    row.status = "archived"
+    row.metadata_ = {
+        **(row.metadata_ or {}),
+        "archived_reason": "low_retention",
+        "archived_at": "2026-01-01T00:00:00+00:00",
+    }
+    db_session.commit()
+
+    response = client.post(
+        f"/api/v1/memories/{memory.id}/feedback", json={"helpful": True}
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "active"
+
+    db_session.expire_all()
+    row = db_session.get(Memory, memory.id)
+    assert row.status == "active"
+    assert "archived_reason" not in (row.metadata_ or {})
+    assert "archived_at" not in (row.metadata_ or {})
+
+
+def test_superseded_memory_is_not_reactivated_by_feedback(
+    client, admin, db_session, memory
+) -> None:
+    """被取代是事实层面的失效，不应因反馈而复活。"""
+    row = db_session.get(Memory, memory.id)
+    row.status = "superseded"
+    db_session.commit()
+
+    response = client.post(
+        f"/api/v1/memories/{memory.id}/feedback", json={"helpful": True}
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "superseded"
 
 
 def test_global_scope_requires_admin_key(

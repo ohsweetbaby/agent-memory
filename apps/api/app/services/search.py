@@ -139,7 +139,9 @@ def _build_filters(req: SearchRequest, workspace_id: str) -> _SearchFilters:
         end_user_id=req.end_user_id,
         session_id=req.session_id,
     )
-    requested = list(req.scopes) if req.scopes else None
+    # 显式传入空列表表示"只要 global"（最小可见），不能当成"未指定=全部作用域"，
+    # 否则会意外暴露 agent/user/session 私有记忆。只有 None 才代表不过滤。
+    requested = list(req.scopes) if req.scopes is not None else None
     pairs = tuple(
         (scope.value, scope_id)
         for scope, scope_id in visible_scopes(context, requested)

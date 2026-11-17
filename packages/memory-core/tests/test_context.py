@@ -216,3 +216,25 @@ def test_negation_and_single_char_location_changes_are_not_collapsed():
         "beijing",
         "nanjing",
     }
+
+
+def test_non_negation_compounds_do_not_block_near_duplicate_folding():
+    # "非常/未来/无论" 等词含否定字但并不否定事实，不应阻止近重复折叠。
+    items = [
+        make_item("liked", "用户喜欢音乐", importance=0.9),
+        make_item("really_liked", "用户非常喜欢音乐", importance=0.7),
+        make_item("plan", "用户计划去北京", importance=0.6),
+        make_item("future_plan", "用户未来计划去北京", importance=0.5),
+    ]
+    _, kept = assemble_context(items)
+    assert {item.id for item in kept} == {"liked", "plan"}
+
+
+def test_real_negation_is_still_preserved_near_non_negation_compound():
+    # 含"非常"但真正被否定（"不"）的事实仍不能被折叠。
+    items = [
+        make_item("likes", "用户非常喜欢咖啡", importance=0.9),
+        make_item("dislikes", "用户非常不喜欢咖啡", importance=0.8),
+    ]
+    _, kept = assemble_context(items)
+    assert {item.id for item in kept} == {"likes", "dislikes"}

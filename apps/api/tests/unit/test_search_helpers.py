@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from app.adapters.fts import build_tsquery, tokenize
-from app.services.search import procedural_bonus
+from app.schemas.search import SearchRequest
+from app.services.search import _build_filters, procedural_bonus
 
 
 def test_procedural_bonus_defaults_to_half() -> None:
@@ -29,3 +30,24 @@ def test_build_tsquery_uses_or_and_sanitizes_punctuation() -> None:
     assert build_tsquery("花生, 过敏") == "花生 | 过敏"
     assert build_tsquery("花生 过敏", conjunction=True) == "花生 & 过敏"
     assert build_tsquery("!!!") is None
+
+
+def test_empty_scopes_mean_global_only_not_all_scopes() -> None:
+    # 显式空列表必须按最小可见只返回 global，不能因 falsy 被当成"未指定=全部"。
+    req = SearchRequest(
+        query="过敏",
+        scopes=[],
+        agent_id="a1",
+        end_user_id="u1",
+        session_id="s1",
+    )
+    assert _build_filters(req, "ws1").scope_pairs == (("global", None),)
+
+
+def test_omitted_scopes_include_context_scopes() -> None:
+    req = SearchRequest(query="过敏", agent_id="a1", end_user_id="u1")
+    assert _build_filters(req, "ws1").scope_pairs == (
+        ("global", None),
+        ("agent", "a1"),
+        ("user", "u1"),
+    )

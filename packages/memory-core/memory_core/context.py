@@ -219,9 +219,36 @@ def _is_near_duplicate(left: str, right: str) -> bool:
 
 _NEGATION_MARKERS = ("不", "没", "无", "未", "别", "非")
 
+#: 以下词虽含否定字，但语义上并不否定事实（程度副词、时间词、地名、关联词）。
+#: 若直接在原文里查否定字，会把"非常/未来/无论/无锡"等误判为否定，
+#: 导致"用户非常喜欢音乐"与"用户喜欢音乐"这类近重复记忆无法折叠。
+_NON_NEGATION_COMPOUNDS = (
+    "非常",
+    "未来",
+    "无论",
+    "无比",
+    "无敌",
+    "无锡",
+    "不仅",
+    "不但",
+    "不论",
+    "不妨",
+    "不懈",
+    "未尝",
+)
+
 
 def _has_negation(text: str) -> bool:
-    return any(marker in text for marker in _NEGATION_MARKERS)
+    """判断文本是否含有真正的否定语义。
+
+    先剔除已知的非否定复合词，再检查否定字，避免把程度/时间/地名等
+    含有"非/未/无/不"的普通词误当作事实否定。剔除是保守的：像"未来
+    不会去"这种句子去掉"未来"后仍保留"不"，否定语义不会丢失。
+    """
+    stripped = text
+    for word in _NON_NEGATION_COMPOUNDS:
+        stripped = stripped.replace(word, "")
+    return any(marker in stripped for marker in _NEGATION_MARKERS)
 
 
 def _is_subsequence(shorter: str, longer: str) -> bool:
